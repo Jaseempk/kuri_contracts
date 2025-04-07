@@ -106,8 +106,6 @@ contract KuriCore is AccessControl {
     /// @notice Main Kuri data structure
     Kuri public kuriData;
 
-    /// @notice Legacy mapping for user status (consider deprecating)
-    mapping(address => UserState) public userStatus;
     /**
      * @notice Mapping to track payments for each interval
      * @dev Uses a bitmap for gas-efficient storage: intervalIndex => bucket => bitmap
@@ -264,10 +262,6 @@ contract KuriCore is AccessControl {
         if (kuriData.launchPeriod < block.timestamp)
             revert KuriCore__AlreadyPastLaunchPeriod();
 
-        // check if the user is already rejected
-        if (userStatus[msg.sender] == UserState.REJECTED)
-            revert KuriCore__AlreadyRejected();
-
         // add the user to the accepted list
         userToData[msg.sender] = UserData(
             UserState.ACCEPTED,
@@ -415,3 +409,14 @@ interface IERC20 {
 
     function balanceOf(address account) external view returns (uint256);
 }
+
+/**
+ * To DOs:
+ * nextTimeInterval & nextTimeReferral update logic to be added,my assumption is it would be better off along with the raffle
+ *
+ * Raffle:
+ * takes place after the raffle-delay
+ * all the users must have made their payment before we could spin up the raffle.
+ * what if there are users yet to make their payments when the raffle-delay is over?
+ * for now we must go with the assumption that all the users have made their payments
+ */
