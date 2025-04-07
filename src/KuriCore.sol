@@ -1,7 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract KuriCore {
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract KuriCore is AccessControl {
     //error messages
     error KuriCore__NoActiveKuri();
     error KuriCore__AlreadyRejected();
@@ -18,6 +20,7 @@ contract KuriCore {
     uint256 public constant MONTHLY_INTERVAL = 30 days;
     uint256 public constant LAUNCH_PERIOD_DURATION = 3 days;
     uint256 public constant RAFFLE_DELAY_DURATION = 3 days;
+    bytes32 public constant INITIALISOR_ROLE = keccak256("INITIALISOR_ROLE");
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
 
@@ -28,6 +31,7 @@ contract KuriCore {
         COMPLETED
     }
     enum UserState {
+        NONE,
         ACCEPTED,
         REJECTED
     }
@@ -38,36 +42,36 @@ contract KuriCore {
 
     struct Kuri {
         address creator;
-        uint256 kuriAmount;
-        uint256 totalParticipantsCount;
-        uint256 totalActiveParticipantsCount;
-        uint256 nexRaffleTime;
-        uint256 nextIntervalDepositTime;
-        uint256 launchPeriod;
-        uint256 startTime;
-        uint256 endTime;
-        uint256 intervalDuration;
+        uint64 kuriAmount;
+        uint16 totalParticipantsCount;
+        uint16 totalActiveParticipantsCount;
+        uint24 intervalDuration;
+        uint48 nexRaffleTime;
+        uint48 nextIntervalDepositTime;
+        uint48 launchPeriod;
+        uint48 startTime;
+        uint48 endTime;
         IntervalType intervalType;
         KuriState state;
     }
 
     struct UserData {
         UserState userState;
-        uint256 userIndex;
+        uint16 userIndex;
     }
 
+    mapping(address => UserData) public userToData;
     Kuri public kuriData;
 
     mapping(address => UserState) public userStatus;
-    mapping(address => UserData) public userToData;
     mapping(uint256 => mapping(uint256 => uint256)) public payments; // month => bitmap
 
     event KuriInitialised(Kuri _kuriData);
 
     event KuriInitFailed(
         address creator,
-        uint256 kuriAmount,
-        uint256 totalParticipantsCount,
+        uint64 kuriAmount,
+        uint16 totalParticipantsCount,
         KuriState state
     );
 
@@ -75,25 +79,34 @@ contract KuriCore {
         address user,
         uint256 userIndex,
         uint256 intervalIndex,
-        uint256 amountDeposited,
-        uint256 depositTimestamp
+        uint64 amountDeposited,
+        uint48 depositTimestamp
     );
 
     constructor(
         address _creator,
-        uint256 _kuriAmount,
-        uint256 _participantCount,
+        uint64 _kuriAmount,
+        uint16 _participantCount,
+        address _initialiser,
         IntervalType _intervalType
     ) {
         kuriData.creator = _creator;
         kuriData.kuriAmount = _kuriAmount;
         kuriData.totalParticipantsCount = _participantCount;
-        kuriData.launchPeriod = block.timestamp + LAUNCH_PERIOD_DURATION;
+        kuriData.launchPeriod = uint48(
+            block.timestamp + LAUNCH_PERIOD_DURATION
+        );
         kuriData.intervalType = _intervalType;
         kuriData.state = KuriState.INLAUNCH;
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(INITIALISOR_ROLE, _initialiser);
     }
 
-    function initialiseKuri() external returns (bool) {
+    function initialiseKuri()
+        external
+        onlyRole(INITIALISOR_ROLE)
+        returns (bool)
+    {
         if (kuriData.state != KuriState.INLAUNCH)
             revert KuriCore__NotInLaunchState();
         if (kuriData.launchPeriod > block.timestamp)
@@ -114,22 +127,23 @@ contract KuriCore {
         }
         uint256 totalIntervals = kuriData.totalParticipantsCount;
 
-        kuriData.startTime = block.timestamp;
+        kuriData.startTime = uint48(block.timestamp);
         kuriData.intervalDuration = kuriData.intervalType == IntervalType.WEEK
-            ? WEEKLY_INTERVAL
-            : MONTHLY_INTERVAL;
+            ? uint24(WEEKLY_INTERVAL)
+            : uint24(MONTHLY_INTERVAL);
 
-        kuriData.nextIntervalDepositTime =
-            block.timestamp +
-            kuriData.intervalDuration;
+        kuriData.nextIntervalDepositTime = uint48(
+            block.timestamp + kuriData.intervalDuration
+        );
         // total time = interval duration * number of intervals + delay duration * number of intervals
-        kuriData.endTime =
+        kuriData.endTime = uint48(
             block.timestamp +
-            ((totalIntervals * kuriData.intervalDuration) +
-                (totalIntervals * RAFFLE_DELAY_DURATION));
-        kuriData.nexRaffleTime =
-            kuriData.nextIntervalDepositTime +
-            RAFFLE_DELAY_DURATION;
+                ((totalIntervals * kuriData.intervalDuration) +
+                    (totalIntervals * RAFFLE_DELAY_DURATION))
+        );
+        kuriData.nexRaffleTime = uint48(
+            kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
+        );
 
         emit KuriInitialised(kuriData);
 
@@ -173,15 +187,15 @@ contract KuriCore {
             revert KuriCore__UserAlreadyDeposited();
 
         if (kuriData.nextIntervalDepositTime <= block.timestamp) {
-            kuriData.nextIntervalDepositTime =
-                block.timestamp +
-                kuriData.intervalDuration;
-            kuriData.nexRaffleTime =
-                kuriData.nextIntervalDepositTime +
-                RAFFLE_DELAY_DURATION;
+            kuriData.nextIntervalDepositTime = uint48(
+                block.timestamp + kuriData.intervalDuration
+            );
+            kuriData.nexRaffleTime = uint48(
+                kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
+            );
         }
 
-        uint256 amountToDeposit = kuriData.kuriAmount /
+        uint64 amountToDeposit = kuriData.kuriAmount /
             kuriData.totalParticipantsCount;
 
         emit UserDeposited(
@@ -189,7 +203,7 @@ contract KuriCore {
             userToData[msg.sender].userIndex,
             passedIntervalsCounter(),
             amountToDeposit,
-            block.timestamp
+            uint48(block.timestamp)
         );
 
         updateUserPaymentStatus();
@@ -232,6 +246,18 @@ contract KuriCore {
             totalDepositIntervalsPassed /
                 (kuriData.intervalDuration + RAFFLE_DELAY_DURATION)
         );
+    }
+
+    function setInitialisor(
+        address _initialiser
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        grantRole(INITIALISOR_ROLE, _initialiser);
+    }
+
+    function revokeInitialisor(
+        address _initialiser
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        revokeRole(INITIALISOR_ROLE, _initialiser);
     }
 }
 
