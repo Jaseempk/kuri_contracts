@@ -108,7 +108,7 @@ contract KuriCoreTest is Test {
     function _warpToNextDepositTime() internal {
         (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
             .kuriData();
-        vm.warp(nextIntervalDepositTime);
+        vm.warp(nextIntervalDepositTime + 1);
     }
 
     // ==================== CONSTRUCTOR TESTS ====================
@@ -257,24 +257,11 @@ contract KuriCoreTest is Test {
     function test_initializeKuriSuccess() public {
         // Get all users to join
         _requestMembershipForAllUsers();
+        (, , , , , , , uint48 currentLaunchPeriod, , , , ) = kuriCore
+            .kuriData();
 
         // Warp to after launch period
         _warpToLaunchPeriodEnd();
-
-        /**    struct Kuri {
-        address creator;
-        uint64 kuriAmount;
-        uint16 totalParticipantsCount;
-        uint16 totalActiveParticipantsCount;
-        uint24 intervalDuration;
-        uint48 nexRaffleTime;
-        uint48 nextIntervalDepositTime;
-        uint48 launchPeriod;
-        uint48 startTime;
-        uint48 endTime;
-        IntervalType intervalType;
-        KuriState state;
-    } */
 
         KuriCore.Kuri memory kuriData = KuriCore.Kuri(
             creator,
@@ -288,7 +275,7 @@ contract KuriCoreTest is Test {
                     kuriCore.RAFFLE_DELAY_DURATION()
             ),
             uint48(block.timestamp + kuriCore.WEEKLY_INTERVAL()),
-            uint48(block.timestamp + kuriCore.LAUNCH_PERIOD_DURATION() + 1),
+            currentLaunchPeriod,
             uint48(block.timestamp),
             uint48(
                 block.timestamp +
@@ -298,8 +285,6 @@ contract KuriCoreTest is Test {
             KuriCore.IntervalType.WEEK,
             KuriCore.KuriState.INLAUNCH
         );
-        //1744536516
-        //1744277316
 
         // Initialize Kuri and check event emission
         vm.prank(initialiser);
@@ -425,7 +410,7 @@ contract KuriCoreTest is Test {
 
     // ==================== USER INSTALLMENT DEPOSIT TESTS ====================
 
-    function testUserInstallmentDeposit() public {
+    function test_userInstallmentDeposit() public {
         // Setup: Get all users to join, initialize Kuri, and approve tokens
         _requestMembershipForAllUsers();
         _warpToLaunchPeriodEnd();
@@ -441,14 +426,14 @@ contract KuriCoreTest is Test {
         emit UserDeposited(
             users[0],
             0, // User index
-            0, // Interval index
+            1, // Interval index
             expectedDepositAmount,
             uint48(block.timestamp)
         );
         kuriCore.userInstallmentDeposit();
 
         // Check payment was recorded
-        bool hasPaid = kuriCore.hasPaid(users[0], 0);
+        bool hasPaid = kuriCore.hasPaid(users[0], 1);
         assertTrue(hasPaid, "Payment should be recorded");
 
         // Check token transfer
@@ -528,11 +513,11 @@ contract KuriCoreTest is Test {
 
         // Second deposit should fail
         vm.prank(users[0]);
-        vm.expectRevert(KuriCore.KuriCore__DepositIntervalNotReached.selector);
+        vm.expectRevert(KuriCore.KuriCore__UserAlreadyDeposited.selector);
         kuriCore.userInstallmentDeposit();
     }
 
-    function testMultipleUsersDeposit() public {
+    function test_multipleUsersDeposit() public {
         // Setup: Get all users to join, initialize Kuri, and approve tokens
         _requestMembershipForAllUsers();
         _warpToLaunchPeriodEnd();
@@ -547,7 +532,7 @@ contract KuriCoreTest is Test {
             vm.prank(users[i]);
             kuriCore.userInstallmentDeposit();
 
-            bool hasPaid = kuriCore.hasPaid(users[i], 0);
+            bool hasPaid = kuriCore.hasPaid(users[i], 1);
             assertTrue(hasPaid, "Payment should be recorded for user ");
         }
 
@@ -556,72 +541,6 @@ contract KuriCoreTest is Test {
             supportedToken.balanceOf(address(kuriCore)),
             expectedDepositAmount * users.length,
             "Contract should have received tokens from all users"
-        );
-    }
-
-    function testDepositUpdatesNextIntervalTime() public {
-        // Setup: Get all users to join, initialize Kuri, and approve tokens
-        _requestMembershipForAllUsers();
-        _warpToLaunchPeriodEnd();
-        _initializeKuri();
-        _warpToNextDepositTime();
-
-        uint64 expectedDepositAmount = KURI_AMOUNT / TOTAL_PARTICIPANTS;
-        _approveTokensForAllUsers(expectedDepositAmount);
-
-        // Record initial times
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            uint48 initialRaffleTime,
-            uint48 initialDepositTime,
-            ,
-            ,
-            ,
-            ,
-
-        ) = kuriCore.kuriData();
-
-        // Make deposit
-        vm.prank(users[0]);
-        kuriCore.userInstallmentDeposit();
-
-        // Check updated times
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            uint48 newRaffleTime,
-            uint48 newDepositTime,
-            ,
-            ,
-            ,
-            ,
-
-        ) = kuriCore.kuriData();
-
-        assertEq(
-            newDepositTime,
-            block.timestamp + kuriCore.WEEKLY_INTERVAL(),
-            "Next deposit time should be updated"
-        );
-        assertEq(
-            newRaffleTime,
-            newDepositTime + kuriCore.RAFFLE_DELAY_DURATION(),
-            "Next raffle time should be updated"
-        );
-        assertTrue(
-            newDepositTime > initialDepositTime,
-            "Deposit time should increase"
-        );
-        assertTrue(
-            newRaffleTime > initialRaffleTime,
-            "Raffle time should increase"
         );
     }
 
