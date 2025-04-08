@@ -23,6 +23,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__RaffleDelayNotOver();
     error KuriCore__LaunchPeriodNotOver();
     error KuriCore__UserAlreadyDeposited();
+    error KuriCore__InvalidIntervalIndex();
     error KuriCore__UserHasClaimedAlready();
     error KuriCore__UserYetToMakePayments();
     error KuriCore__AlreadyPastLaunchPeriod();
@@ -44,14 +45,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
 
-    uint256 s_subscriptionId =
+    uint256 public s_subscriptionId =
         111354311979648395489096536317869612424008220436069067319236829392818402563961;
-    bytes32 s_keyHash =
+    bytes32 public s_keyHash =
         0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
-    address vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
-    uint32 callbackGasLimit = 40000;
-    uint16 requestConfirmations = 3;
-    uint32 numWords = 1;
+    address public vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
+    uint32 public callbackGasLimit = 40000;
+    uint16 public requestConfirmations = 3;
+    uint32 public numWords = 1;
 
     /**
      * @notice Enum representing the possible states of a Kuri
@@ -194,20 +195,18 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /**
      * @notice Creates a new Kuri instance
      * @dev Sets initial state to INLAUNCH and grants roles
-     * @param _creator Address of the Kuri creator
      * @param _kuriAmount Total amount to be collected in the Kuri
      * @param _participantCount Required number of participants
      * @param _initialiser Address authorized to initialize the Kuri
      * @param _intervalType Type of interval (weekly/monthly)
      */
     constructor(
-        address _creator,
         uint64 _kuriAmount,
         uint16 _participantCount,
         address _initialiser,
         IntervalType _intervalType
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
-        kuriData.creator = _creator;
+        kuriData.creator = msg.sender;
         kuriData.kuriAmount = _kuriAmount;
         kuriData.totalParticipantsCount = _participantCount;
         kuriData.launchPeriod = uint48(
@@ -419,6 +418,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function claimKuriAmount(uint16 intervalIndex) public {
         if (!hasWon(msg.sender)) revert KuriCore__UserYetToGetASlot();
         if (!hasClaimed(msg.sender)) revert KuriCore__UserHasClaimedAlready();
+        if (intervalIndex > kuriData.totalParticipantsCount)
+            revert KuriCore__InvalidIntervalIndex();
         if (!hasPaid(msg.sender, intervalIndex))
             revert KuriCore__UserYetToMakePayments();
 
@@ -449,7 +450,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit for the user in the current interval
-        wonKuriSlot[bucket] |= mask;
+        claimedKuriSlot[bucket] |= mask;
     }
 
     /**
@@ -534,7 +535,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @return numTotalDepositIntervalsPassed The number of intervals that have passed
      */
     function passedIntervalsCounter()
-        internal
+        public
         view
         returns (uint16 numTotalDepositIntervalsPassed)
     {

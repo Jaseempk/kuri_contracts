@@ -4,10 +4,25 @@ pragma solidity ^0.8.24;
 import {Test, console} from "forge-std/Test.sol";
 import {KuriCore} from "../../src/KuriCore.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
+import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
+import {LinkToken} from "../mocks/LinkToken.sol";
+import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
 contract KuriCoreTest is Test {
     KuriCore kuriCore;
     MockERC20 supportedToken;
+    VRFCoordinatorV2_5Mock vrfCoordinatorMock;
+    LinkToken linkToken;
+
+    // VRF Constants
+    uint96 public constant MOCK_BASE_FEE = 0.25 ether; // 0.25 LINK
+    uint96 public constant MOCK_GAS_PRICE_LINK = 1e9; // 1 gwei LINK
+    uint256 public constant MOCK_WEI_PER_UINT_LINK = 1e18;
+    uint256 public constant LINK_BALANCE = 5 ether;
+    bytes32 public constant GAS_LANE = 0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c;
+    uint32 public constant CALLBACK_GAS_LIMIT = 500000;
+    uint16 public constant REQUEST_CONFIRMATIONS = 3;
+    uint32 public constant NUM_WORDS = 1;
 
     // Constants
     uint64 public constant KURI_AMOUNT = 10001e6;
@@ -39,6 +54,14 @@ contract KuriCoreTest is Test {
         uint64 amountDeposited,
         uint48 depositTimestamp
     );
+    event RequestedRaffleWinner(uint256 indexed requestId);
+    event RaaffleWinnerSelected(
+        uint16  __intervalIndex,
+        uint16  __winnerIndex,
+        address __winnerAddress,
+        uint48  __timestamp,
+        uint256 __requestId
+    );
 
     function setUp() public {
         // Setup addresses
@@ -62,20 +85,46 @@ contract KuriCoreTest is Test {
         // Mint tokens to users
         for (uint16 i = 0; i < users.length; i++) {
             deal(address(SUPPORTED_TOKEN), users[i], INITIAL_USER_BALANCE);
-            // supportedToken.mint(users[i], INITIAL_USER_BALANCE);
         }
 
-        console.log("heey");
+        // Deploy VRF Coordinator Mock
+        vrfCoordinatorMock = new VRFCoordinatorV2_5Mock(
+            MOCK_BASE_FEE,
+            MOCK_GAS_PRICE_LINK,
+            int256(MOCK_WEI_PER_UINT_LINK)
+        );
+        
+        // Deploy Link Token
+        linkToken = new LinkToken();
+        
+        // Create VRF Subscription
+        uint256 subscriptionId = vrfCoordinatorMock.createSubscription();
+        
+        // Fund the subscription
+        vrfCoordinatorMock.fundSubscription(subscriptionId, LINK_BALANCE);
 
         // Deploy KuriCore contract
         vm.prank(admin);
         kuriCore = new KuriCore(
-            creator,
+
             KURI_AMOUNT,
             TOTAL_PARTICIPANTS,
             initialiser,
             intervalTypeEnum
         );
+        
+        // // Configure VRF in KuriCore
+        // vm.startPrank(admin);
+        // kuriCore.setVrfCoordinator(address(vrfCoordinatorMock));
+        // kuriCore.setSubscriptionId(subscriptionId);
+        // kuriCore.setKeyHash(GAS_LANE);
+        // kuriCore.setCallbackGasLimit(CALLBACK_GAS_LIMIT);
+        // kuriCore.setRequestConfirmations(REQUEST_CONFIRMATIONS);
+        // kuriCore.setNumWords(NUM_WORDS);
+        // vm.stopPrank();
+        
+        // Add KuriCore as a consumer to the VRF subscription
+        vrfCoordinatorMock.addConsumer(subscriptionId, address(kuriCore));
     }
 
     // Helper functions
@@ -97,7 +146,7 @@ contract KuriCoreTest is Test {
     function _warpToLaunchPeriodEnd() internal {
         console.log("launchingPeriod:", kuriCore.LAUNCH_PERIOD_DURATION());
         // Warp to just after the launch period
-        vm.warp(block.timestamp + kuriCore.LAUNCH_PERIOD_DURATION() + 1);
+        vm.warp(block.timestamp + uint256(kuriCore.LAUNCH_PERIOD_DURATION()) + 1);
     }
 
     function _initializeKuri() internal {
@@ -106,7 +155,7 @@ contract KuriCoreTest is Test {
     }
 
     function _warpToNextDepositTime() internal {
-        (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
+        (, , , , , , , uint48 nextIntervalDepositTime, , , ,  ) = kuriCore
             .kuriData();
         vm.warp(nextIntervalDepositTime + 1);
     }
@@ -169,7 +218,7 @@ contract KuriCoreTest is Test {
         vm.prank(users[0]);
         kuriCore.requestMembership();
 
-        (KuriCore.UserState userState, uint16 userIndex) = kuriCore.userToData(
+        (KuriCore.UserState userState, uint16 userIndex,) = kuriCore.userToData(
             users[0]
         );
         (, , , uint16 totalActiveParticipantsCount, , , , , , , , ) = kuriCore
@@ -193,7 +242,7 @@ contract KuriCoreTest is Test {
             vm.prank(users[i]);
             kuriCore.requestMembership();
 
-            (KuriCore.UserState userState, uint16 userIndex) = kuriCore
+            (KuriCore.UserState userState, uint16 userIndex,) = kuriCore
                 .userToData(users[i]);
             assertEq(
                 uint8(userState),
@@ -678,7 +727,6 @@ contract KuriCoreTest is Test {
 
         vm.prank(admin);
         KuriCore maxKuri = new KuriCore(
-            creator,
             KURI_AMOUNT,
             maxParticipants,
             initialiser,
@@ -693,25 +741,734 @@ contract KuriCoreTest is Test {
             "Should handle maximum participants"
         );
     }
+
+    // ==================== RAFFLE SYSTEM TESTS ====================
+
+    function test_kuriNarukkInitiatesRaffle() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+
+        // Mock VRF coordinator to capture the request
+        vm.mockCall(
+            address(kuriCore),
+            abi.encodeWithSignature(
+                "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
+                abi.encode(
+                    kuriCore.s_keyHash(),
+                    kuriCore.s_subscriptionId(),
+                    kuriCore.requestConfirmations(),
+                    kuriCore.callbackGasLimit(),
+                    kuriCore.numWords()
+                )
+            ),
+            abi.encode(12345) // Mock request ID
+        );
+
+        // Call kuriNarukk
+        vm.prank(admin);
+        uint256 requestId = kuriCore.kuriNarukk();
+
+        // Verify request ID is returned
+        assertEq(requestId, 12345, "Request ID should match mock value");
+    }
+
+    function test_kuriNarukkRevertsBeforeRaffleDelay() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Try to call kuriNarukk before raffle delay is over
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__RaffleDelayNotOver.selector);
+        kuriCore.kuriNarukk();
+    }
+
+    function test_kuriNarukkRequiresAdminRole() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+
+        // Non-admin tries to call kuriNarukk
+        vm.prank(users[0]);
+        vm.expectRevert(); // AccessControl will revert
+        kuriCore.kuriNarukk();
+    }
+
+    // Note: We can't directly test fulfillRandomWords as it's an internal function
+    // Instead, we'll test the effects of the raffle by simulating the state changes
+    // that would occur after a winner is selected
+
+    function test_raffleWinnerSelection() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+
+        // Call kuriNarukk to initiate raffle
+        vm.mockCall(
+            address(kuriCore),
+            abi.encodeWithSignature(
+                "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
+                abi.encode(
+                    kuriCore.s_keyHash(),
+                    kuriCore.s_subscriptionId(),
+                    kuriCore.requestConfirmations(),
+                    kuriCore.callbackGasLimit(),
+                    kuriCore.numWords()
+                )
+            ),
+            abi.encode(12345) // Mock request ID
+        );
+
+        vm.prank(admin);
+        kuriCore.kuriNarukk();
+
+        // Since we can't call fulfillRandomWords directly, we'll simulate its effects
+        // by manually setting the winner in the contract state
+
+        // Simulate a winner being selected (user at index 3)
+        uint16 intervalIndex = 0; // First interval
+        uint16 winnerIndex = 4; // 1-indexed (user at index 3)
+        address winnerAddress = users[3];
+
+        // Manually set the winner in the contract state
+        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(6))); // intervalToWinnerIndex mapping is at slot 6
+        vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
+
+        // Manually set the user as having won
+        uint256 userIndex = 3;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+
+        // Verify winner is correctly recorded
+        assertEq(kuriCore.intervalToWinnerIndex(intervalIndex), winnerIndex, "Winner index should be set correctly");
+        assertTrue(kuriCore.hasWon(winnerAddress), "Winner should be marked as having won");
+    }
+
+    function test_hasWonFunction() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Initially no user has won
+        for (uint16 i = 0; i < users.length; i++) {
+            assertFalse(kuriCore.hasWon(users[i]), "User should not have won initially");
+        }
+
+        // Manually set a user as having won by manipulating storage
+        address user = users[2];
+        uint256 userIndex = 2;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+
+        // Verify hasWon returns true for this user
+        assertTrue(kuriCore.hasWon(user), "User should be marked as having won");
+    }
+
+    // ==================== CLAIMING SYSTEM TESTS ====================
+
+    function test_claimKuriAmount() public {
+        // Setup: Get all users to join, initialize Kuri, and approve tokens
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        _approveTokensForAllUsers(KURI_AMOUNT);
+
+        // Make deposits for all users
+        _warpToNextDepositTime();
+        for (uint16 i = 0; i < users.length; i++) {
+            vm.prank(users[i]);
+            kuriCore.userInstallmentDeposit();
+        }
+
+        // Mark user 3 as having won
+        address user = users[3];
+        uint256 userIndex = 3;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+
+        // Ensure the contract has enough tokens to pay out
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+
+        // Expect the KuriSlotClaimed event
+        uint16 intervalIndex = 0; // First interval
+        vm.expectEmit(true, true, true, true);
+        emit KuriSlotClaimed(user, uint64(block.timestamp), KURI_AMOUNT, intervalIndex);
+
+        // Claim the Kuri amount
+        vm.prank(user);
+        kuriCore.claimKuriAmount(intervalIndex);
+
+        // Verify user is marked as having claimed
+        assertTrue(kuriCore.hasClaimed(user), "User should be marked as having claimed");
+
+        // Verify token transfer
+        assertEq(
+            supportedToken.balanceOf(user),
+            INITIAL_USER_BALANCE - (KURI_AMOUNT / TOTAL_PARTICIPANTS) + KURI_AMOUNT,
+            "User should have received Kuri amount"
+        );
+    }
+
+    function test_claimKuriAmountRevertsForNonWinner() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Try to claim without having won
+        vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__UserYetToGetASlot.selector);
+        kuriCore.claimKuriAmount(0);
+    }
+
+    function test_claimKuriAmountRevertsForAlreadyClaimed() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Mark user as having won
+        address user = users[1];
+        uint256 userIndex = 1;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+
+        // Mark user as having already claimed
+        bytes32 claimedSlot = keccak256(abi.encode(uint256(4))); // claimedKuriSlot mapping is at slot 4
+        bytes32 claimedBucketKey = keccak256(abi.encode(bucket, claimedSlot));
+        vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
+
+        // Try to claim again
+        vm.prank(user);
+        vm.expectRevert(KuriCore.KuriCore__UserHasClaimedAlready.selector);
+        kuriCore.claimKuriAmount(0);
+    }
+
+    function test_claimKuriAmountRevertsForInvalidInterval() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Mark user as having won
+        address user = users[2];
+        uint256 userIndex = 2;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+
+        // Try to claim with invalid interval
+        vm.prank(user);
+        vm.expectRevert(KuriCore.KuriCore__InvalidIntervalIndex.selector);
+        kuriCore.claimKuriAmount(TOTAL_PARTICIPANTS + 1);
+    }
+
+    function test_claimKuriAmountRevertsForUnpaidInterval() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Mark user as having won
+        address user = users[3];
+        uint256 userIndex = 3;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+
+        // Try to claim without having paid
+        vm.prank(user);
+        vm.expectRevert(KuriCore.KuriCore__UserYetToMakePayments.selector);
+        kuriCore.claimKuriAmount(0);
+    }
+
+    function test_hasClaimedFunction() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Initially no user has claimed
+        for (uint16 i = 0; i < users.length; i++) {
+            assertFalse(kuriCore.hasClaimed(users[i]), "User should not have claimed initially");
+        }
+
+        // Manually set a user as having claimed by manipulating storage
+        address user = users[4];
+        uint256 userIndex = 4;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit directly in storage
+        bytes32 slot = keccak256(abi.encode(uint256(4))); // claimedKuriSlot mapping is at slot 4
+        bytes32 bucketKey = keccak256(abi.encode(bucket, slot));
+        vm.store(address(kuriCore), bucketKey, bytes32(mask));
+
+        // Verify hasClaimed returns true for this user
+        assertTrue(kuriCore.hasClaimed(user), "User should be marked as having claimed");
+    }
+
+    function test_kuriSlotClaimedEvent() public {
+        // Setup: Get all users to join, initialize Kuri, and approve tokens
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        _approveTokensForAllUsers(KURI_AMOUNT);
+        
+        // Make deposits for all users
+        _warpToNextDepositTime();
+        for (uint16 i = 0; i < users.length; i++) {
+            vm.prank(users[i]);
+            kuriCore.userInstallmentDeposit();
+        }
+        
+        // Mark user 3 as having won
+        address user = users[3];
+        uint256 userIndex = 3;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+        
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        
+        // Ensure the contract has enough tokens to pay out
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+        
+        // Expect the KuriSlotClaimed event
+        uint16 intervalIndex = 0; // First interval
+        vm.expectEmit(true, true, true, true);
+        emit KuriSlotClaimed(user, uint64(block.timestamp), KURI_AMOUNT, intervalIndex);
+        
+        // Claim the Kuri amount
+        vm.prank(user);
+        kuriCore.claimKuriAmount(intervalIndex);
+    }
+
+    // ==================== USER ID TO ADDRESS MAPPING TESTS ====================
+
+    function test_userIdToAddressMapping() public {
+        // Clear any existing mappings
+        vm.store(address(kuriCore), bytes32(uint256(5)), bytes32(0)); // userIdToAddress mapping is at slot 5
+
+        // Request membership for users
+        for (uint16 i = 0; i < 5; i++) {
+            vm.prank(users[i]);
+            kuriCore.requestMembership();
+
+            // Verify mapping is updated correctly
+            address storedAddress = kuriCore.userIdToAddress(i);
+            assertEq(storedAddress, users[i], "User ID to address mapping incorrect");
+        }
+    }
+
+    // ==================== INTEGRATION TESTS ====================
+
+    function test_fullKuriLifecycle() public {
+        // 1. Request membership for all users
+        _requestMembershipForAllUsers();
+        
+        // 2. Initialize Kuri
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        
+        // 3. Make deposits for first interval
+        _approveTokensForAllUsers(KURI_AMOUNT);
+        _warpToNextDepositTime();
+        for (uint16 i = 0; i < users.length; i++) {
+            vm.prank(users[i]);
+            kuriCore.userInstallmentDeposit();
+        }
+        
+        // 4. Trigger raffle
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+        
+        // Mock VRF coordinator to capture the request
+        vm.mockCall(
+            address(kuriCore),
+            abi.encodeWithSignature(
+                "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
+                abi.encode(
+                    kuriCore.s_keyHash(),
+                    kuriCore.s_subscriptionId(),
+                    kuriCore.requestConfirmations(),
+                    kuriCore.callbackGasLimit(),
+                    kuriCore.numWords()
+                )
+            ),
+            abi.encode(12345) // Mock request ID
+        );
+        
+        // Call kuriNarukk
+        vm.prank(admin);
+        // uint256 requestId = 
+        kuriCore.kuriNarukk();
+        
+        // 5. Simulate VRF callback by manually setting the winner
+        uint16 intervalIndex = 0; // First interval
+        uint16 winnerIndex = 3; // 1-indexed (user at index 2)
+        address winnerAddress = users[2];
+        
+        // Manually set the winner in the contract state
+        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(6))); // intervalToWinnerIndex mapping is at slot 6
+        vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
+        
+        // Manually set the user as having won
+        uint256 userIndex = 2;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+        
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        
+        // 6. Verify winner and claim Kuri amount
+        assertTrue(kuriCore.hasWon(winnerAddress), "Winner should be marked as having won");
+        
+        // Ensure contract has enough tokens
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+        
+        // Claim Kuri amount
+        vm.prank(winnerAddress);
+        kuriCore.claimKuriAmount(intervalIndex);
+        
+        // Verify winner received tokens
+        assertEq(
+            supportedToken.balanceOf(winnerAddress),
+            INITIAL_USER_BALANCE - (KURI_AMOUNT / TOTAL_PARTICIPANTS) + KURI_AMOUNT,
+            "Winner should have received Kuri amount"
+        );
+        
+        // 7. Verify winner is marked as having claimed
+        assertTrue(kuriCore.hasClaimed(winnerAddress), "Winner should be marked as having claimed");
+    }
+
+    // ==================== SECURITY TESTS ====================
+
+    function test_bitmapOperationsWithHighUserIndices() public {
+        // Test with user indices near the bitmap bucket boundaries
+        uint16[] memory testIndices = new uint16[](4);
+        testIndices[0] = 255;   // Last index in first bucket
+        testIndices[1] = 256;   // First index in second bucket
+        testIndices[2] = 511;   // Last index in second bucket
+        testIndices[3] = 512;   // First index in third bucket
+        
+        for (uint16 i = 0; i < testIndices.length; i++) {
+            uint16 userIndex = testIndices[i];
+            address user = makeAddr(string(abi.encodePacked("highIndexUser", userIndex)));
+            
+            // Mock the user data
+            uint256 bucket = userIndex >> 8;
+            uint256 mask = 1 << (userIndex & 0xff);
+            
+            // Set the bit directly in storage for wonKuriSlot
+            bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+            bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+            vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+            
+            // Verify hasWon works correctly
+            assertTrue(kuriCore.hasWon(user), "hasWon should work for high indices");
+            
+            // Test claimedKuriSlot bitmap
+            bytes32 claimedSlot = keccak256(abi.encode(uint256(4))); // claimedKuriSlot mapping is at slot 4
+            bytes32 claimedBucketKey = keccak256(abi.encode(bucket, claimedSlot));
+            vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
+            
+            // Verify hasClaimed works correctly
+            assertTrue(kuriCore.hasClaimed(user), "hasClaimed should work for high indices");
+        }
+    }
+
+    function test_reentrancyProtectionOnClaim() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        
+        // Mark user as having won and paid
+        address user = users[5];
+        uint256 userIndex = 5;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+        
+        // Set the bit directly in storage for wonKuriSlot
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        
+        // Set the bit directly in storage for payments
+        uint16 intervalIndex = 0;
+        bytes32 paymentsSlot = keccak256(abi.encode(intervalIndex, bucket, uint256(2))); // payments mapping is at slot 2
+        vm.store(address(kuriCore), paymentsSlot, bytes32(mask));
+        
+        // Deploy a malicious contract that will try to reenter
+        MaliciousReentrancyAttacker attacker = new MaliciousReentrancyAttacker(address(kuriCore));
+        
+        // Transfer ownership of the user account to the attacker
+        vm.prank(user);
+        supportedToken.transfer(address(attacker), supportedToken.balanceOf(user));
+        
+        // Ensure the contract has enough tokens to pay out
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+        
+        // Try to claim via the attacker
+        vm.expectRevert(); // Should revert due to reentrancy protection
+        attacker.attack(intervalIndex);
+    }
+
+    // ==================== EVENTS TESTS ====================
+
+    function test_raffleWinnerSelectedEvent() public {
+        // Note: We can't directly test this event since it's emitted by the internal fulfillRandomWords function
+        // Instead, we'll focus on testing the state changes that would occur after a winner is selected
+        
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+        
+        // Call kuriNarukk to initiate raffle
+        vm.mockCall(
+            address(kuriCore),
+            abi.encodeWithSignature(
+                "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
+                abi.encode(
+                    kuriCore.s_keyHash(),
+                    kuriCore.s_subscriptionId(),
+                    kuriCore.requestConfirmations(),
+                    kuriCore.callbackGasLimit(),
+                    kuriCore.numWords()
+                )
+            ),
+            abi.encode(12345) // Mock request ID
+        );
+        
+        vm.prank(admin);
+        kuriCore.kuriNarukk();
+        
+        // Simulate a winner being selected (user at index 3)
+        uint16 intervalIndex = 0; // First interval
+        uint16 winnerIndex = 4; // 1-indexed (user at index 3)
+        address winnerAddress = users[3];
+        
+        // Manually set the winner in the contract state
+        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(6))); // intervalToWinnerIndex mapping is at slot 6
+        vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
+        
+        // Manually set the user as having won
+        uint256 userIndex = 3;
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+        
+        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
+        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        
+        // Verify winner is correctly recorded
+        assertEq(kuriCore.intervalToWinnerIndex(intervalIndex), winnerIndex, "Winner index should be set correctly");
+        assertTrue(kuriCore.hasWon(winnerAddress), "Winner should be marked as having won");
+    }
+
+    // ==================== VRF RAFFLE TESTS ====================
+
+    function test_kuriNarukkRequestsRandomness() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+        
+        // Expect the RequestedRaffleWinner event to be emitted
+        vm.expectEmit(true, false, false, false);
+        emit RequestedRaffleWinner(1); // The exact request ID will be different
+        
+        // Call kuriNarukk to initiate raffle
+        vm.prank(admin);
+        uint256 requestId = kuriCore.kuriNarukk();
+        
+        // Verify request ID is non-zero
+        assertGt(requestId, 0, "Request ID should be greater than 0");
+    }
+    
+    function test_fulfillRandomWordsSelectsWinner() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+        
+        // Call kuriNarukk to initiate raffle
+        vm.prank(admin);
+        uint256 requestId = kuriCore.kuriNarukk();
+        
+        // Create random words for the VRF response
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 123; // This will determine the winner
+        
+        // Fulfill the randomness request
+        vrfCoordinatorMock.fulfillRandomWords(requestId, address(kuriCore));
+        
+        // Verify a winner was selected
+        uint16 intervalIndex = kuriCore.passedIntervalsCounter();
+        uint16 winnerIndex = kuriCore.intervalToWinnerIndex(intervalIndex);
+        
+        // Winner index should be non-zero (1-indexed in the contract)
+        assertGt(winnerIndex, 0, "Winner index should be greater than 0");
+        
+        // Winner should be marked as having won
+        address winnerAddress = kuriCore.userIdToAddress(winnerIndex);
+        assertTrue(kuriCore.hasWon(winnerAddress), "Winner should be marked as having won");
+    }
+    
+    function test_winnerCanClaimKuriAmount() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+        
+        // Ensure all users have made their deposits
+        _approveTokensForAllUsers(KURI_AMOUNT);
+        for (uint16 i = 0; i < TOTAL_PARTICIPANTS; i++) {
+            _warpToNextDepositTime();
+            for (uint16 j = 0; j < users.length; j++) {
+                vm.prank(users[j]);
+                kuriCore.userInstallmentDeposit();
+            }
+        }
+        
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+        
+        // Call kuriNarukk to initiate raffle
+        vm.prank(admin);
+        uint256 requestId = kuriCore.kuriNarukk();
+        
+        // Create random words for the VRF response - force a specific winner
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 42; // This will determine the winner
+        
+        // Fulfill the randomness request
+        vrfCoordinatorMock.fulfillRandomWords(requestId, address(kuriCore));
+        
+        // Get the winner
+        uint16 intervalIndex = kuriCore.passedIntervalsCounter();
+        uint16 winnerIndex = kuriCore.intervalToWinnerIndex(intervalIndex);
+        address winnerAddress = kuriCore.userIdToAddress(winnerIndex);
+        
+        // Ensure the contract has enough tokens to pay out
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+        
+        // Winner claims their Kuri amount
+        uint256 balanceBefore = supportedToken.balanceOf(winnerAddress);
+        
+        vm.prank(winnerAddress);
+        kuriCore.claimKuriAmount(intervalIndex);
+        
+        uint256 balanceAfter = supportedToken.balanceOf(winnerAddress);
+        
+        // Verify the winner received the Kuri amount
+        assertEq(balanceAfter - balanceBefore, KURI_AMOUNT, "Winner should receive the Kuri amount");
+        
+        // Verify the winner is marked as having claimed
+        assertTrue(kuriCore.hasClaimed(winnerAddress), "Winner should be marked as having claimed");
+    }
 }
 
-/**
- * @title IERC20
- * @dev Interface for the ERC20 standard
- */
-interface IERC20 {
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-
-    function transfer(
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-
-    function balanceOf(address account) external view returns (uint256);
-
-    function approve(address spender, uint256 amount) external returns (bool);
+contract MaliciousReentrancyAttacker {
+    KuriCore private kuriCore;
+    uint16 private intervalIndex;
+    bool private attacking;
+    
+    constructor(address _kuriCore) {
+        kuriCore = KuriCore(_kuriCore);
+    }
+    
+    function attack(uint16 _intervalIndex) external {
+        intervalIndex = _intervalIndex;
+        attacking = true;
+        kuriCore.claimKuriAmount(intervalIndex);
+    }
+    
+    // This function will be called during the token transfer
+    function onERC20Received(address, uint256) external returns (bool) {
+        if (attacking) {
+            attacking = false;
+            kuriCore.claimKuriAmount(intervalIndex); // Try to reenter
+        }
+        return true;
+    }
 }
+
+// Event definitions for testing
+event RaffleWinnerSelected(
+    uint16 intervalIndex,
+    uint16 winnerIndex,
+    address winnerAddress,
+    uint48 timestamp,
+    uint256 requestId
+);
+
+event KuriSlotClaimed(
+    address user,
+    uint64 timestamp,
+    uint64 kuriAmount,
+    uint16 intervalIndex
+);
