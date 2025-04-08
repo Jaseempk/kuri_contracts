@@ -19,9 +19,12 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__AlreadyRejected();
     error KuriCore__NotInLaunchState();
     error KuriCore__CallerNotAccepted();
+    error KuriCore__UserYetToGetASlot();
     error KuriCore__RaffleDelayNotOver();
     error KuriCore__LaunchPeriodNotOver();
     error KuriCore__UserAlreadyDeposited();
+    error KuriCore__UserHasClaimedAlready();
+    error KuriCore__UserYetToMakePayments();
     error KuriCore__AlreadyPastLaunchPeriod();
     error KuriCore__DepositIntervalNotReached();
     error KuriCore__CantRequestWhenNotInLaunch();
@@ -41,7 +44,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
 
-    uint256 s_subscriptionId;
+    uint256 s_subscriptionId =
+        111354311979648395489096536317869612424008220436069067319236829392818402563961;
     bytes32 s_keyHash =
         0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
     address vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
@@ -123,7 +127,9 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     mapping(uint256 => mapping(uint256 => uint256)) public payments; // month => bitmap
 
-    mapping(uint256 => uint256) public kuriClaimed;
+    mapping(uint256 => uint256) public wonKuriSlot;
+
+    mapping(uint256 => uint256) public claimedKuriSlot;
 
     /// @notice Mapping to store user data by address
     mapping(address => UserData) public userToData;
@@ -178,6 +184,13 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint48 depositTimestamp
     );
 
+    event KuriSlotClaimed(
+        address user,
+        uint64 timestamp,
+        uint64 kuriAmount,
+        uint16 intervalIndex
+    );
+
     /**
      * @notice Creates a new Kuri instance
      * @dev Sets initial state to INLAUNCH and grants roles
@@ -192,8 +205,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint64 _kuriAmount,
         uint16 _participantCount,
         address _initialiser,
-        IntervalType _intervalType,
-        uint256 _subscriptionId
+        IntervalType _intervalType
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         kuriData.creator = _creator;
         kuriData.kuriAmount = _kuriAmount;
@@ -203,7 +215,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         );
         kuriData.intervalType = _intervalType;
         kuriData.state = KuriState.INLAUNCH;
-        s_subscriptionId = _subscriptionId;
+
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(INITIALISOR_ROLE, _initialiser);
     }
@@ -379,7 +391,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             (randomWords[0] % kuriData.totalActiveParticipantsCount) + 1
         );
         address idtoUser = userIdToAddress[d20Value];
-        if (!hasClaimed(idtoUser)) {
+        if (!hasWon(idtoUser)) {
             kuriData.nextIntervalDepositTime = uint48(
                 block.timestamp + kuriData.intervalDuration
             );
@@ -396,7 +408,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
                 uint48(block.timestamp),
                 requestId
             );
-            updateUserKuriClaimStatus(idtoUser);
+            updateUserKuriSlotStatus(idtoUser);
 
             intervalToWinnerIndex[intervalIndex] = d20Value;
         } else {
@@ -404,12 +416,48 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         }
     }
 
+    function claimKuriAmount(uint16 intervalIndex) public {
+        if (!hasWon(msg.sender)) revert KuriCore__UserYetToGetASlot();
+        if (!hasClaimed(msg.sender)) revert KuriCore__UserHasClaimedAlready();
+        if (!hasPaid(msg.sender, intervalIndex))
+            revert KuriCore__UserYetToMakePayments();
+
+        emit KuriSlotClaimed(
+            msg.sender,
+            uint64(block.timestamp),
+            kuriData.kuriAmount,
+            intervalIndex
+        );
+        updateUserKuriSlotClaimStatus();
+        IERC20(SUPPORTED_TOKEN).transferFrom(
+            address(this),
+            msg.sender,
+            kuriData.kuriAmount
+        );
+    }
+
     /**
-     * @notice Updates the payment status for a user
+     * @notice Updates the kuri slot-claim status for a user
      * @dev Uses a bitmap for gas-efficient storage
      * @dev Each bit in the bitmap represents a user's payment status for a specific interval
      */
-    function updateUserKuriClaimStatus(address user) internal {
+    function updateUserKuriSlotClaimStatus() internal {
+        uint256 userIndex = userToData[msg.sender].userIndex;
+
+        // Calculate the bucket and mask for the bitmap
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit for the user in the current interval
+        wonKuriSlot[bucket] |= mask;
+    }
+
+    /**
+     * @notice Updates the kuri slot status for a user
+     * @dev Uses a bitmap for gas-efficient storage
+     * @dev Each bit in the bitmap represents a user's payment status for a specific interval
+     */
+    function updateUserKuriSlotStatus(address user) internal {
         uint256 userIndex = userToData[user].userIndex;
 
         // Calculate the bucket and mask for the bitmap
@@ -417,7 +465,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit for the user in the current interval
-        kuriClaimed[bucket] |= mask;
+        wonKuriSlot[bucket] |= mask;
     }
 
     /**
@@ -447,7 +495,20 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint256 index = userToData[user].userIndex;
         uint256 bucket = index >> 8;
         uint256 mask = 1 << (index & 0xff);
-        return (kuriClaimed[bucket] & mask) != 0;
+        return (wonKuriSlot[bucket] & mask) != 0;
+    }
+
+    /**
+     * @notice Checks if a user have already claimed kuri in this cycle
+     * @dev Uses the bitmap storage to efficiently check payment status
+     * @param user Address of the user to check
+     * @return bool True if the user has paid for the interval, false otherwise
+     */
+    function hasWon(address user) public view returns (bool) {
+        uint256 index = userToData[user].userIndex;
+        uint256 bucket = index >> 8;
+        uint256 mask = 1 << (index & 0xff);
+        return (wonKuriSlot[bucket] & mask) != 0;
     }
 
     /**
