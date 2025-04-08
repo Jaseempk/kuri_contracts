@@ -17,20 +17,20 @@ contract KuriCoreTest is Test,CodeConstants {
     VRFCoordinatorV2_5Mock vrfCoordinatorMock;
     LinkToken linkToken;
 
-        uint256 subscriptionId;
+    uint256 subscriptionId;
     bytes32 gasLane;
     uint256 automationUpdateInterval;
     uint32 callbackGasLimit;
         
-        address vrfCoordinatorV2_5;
+    address vrfCoordinatorV2_5;
     LinkToken link;
 
 uint256 public constant LINK_BALANCE = 100 ether;
 
     // Constants
-    uint64 public constant KURI_AMOUNT = 10001e6;
+    uint64 public constant KURI_AMOUNT = 1000e6;
     uint16 public constant TOTAL_PARTICIPANTS = 10;
-    uint256 public constant INITIAL_USER_BALANCE = 10001e6;
+    uint256 public constant INITIAL_USER_BALANCE = 1000e6;
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
     // Test addresses
@@ -70,7 +70,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         DeployKuriCore deployer= new DeployKuriCore();
         (kuriCore,helperConfig)=deployer.run();
 
-                HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+            HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         subscriptionId = config.subscriptionId;
         gasLane = config.gasLane;
         automationUpdateInterval = config.automationUpdateInterval;
@@ -141,7 +141,11 @@ uint256 public constant LINK_BALANCE = 100 ether;
     function _warpToNextDepositTime() internal {
         (, , , , , , , uint48 nextIntervalDepositTime, , , ,  ) = kuriCore
             .kuriData();
-        vm.warp(nextIntervalDepositTime + 1);
+
+            console.log("befooooreeeoe:",block.timestamp);
+        skip(nextIntervalDepositTime + 1);
+
+        console.log("aafterrr:",block.timestamp);
     }
 
     // ==================== CONSTRUCTOR TESTS ====================
@@ -372,7 +376,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         assertEq(endTime, expectedEndTime, "End time mismatch");
     }
 
-    function testInitializeKuriFailure() public {
+    function test_initializeKuriFailure() public {
         // Only 5 users join (not enough)
         for (uint16 i = 0; i < 5; i++) {
             vm.prank(users[i]);
@@ -386,7 +390,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         vm.prank(initialiser);
         vm.expectEmit(true, true, true, true);
         emit KuriInitFailed(
-            creator,
+            initialiser,
             KURI_AMOUNT,
             TOTAL_PARTICIPANTS,
             KuriCore.KuriState.LAUNCHFAILED
@@ -877,7 +881,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
 
     // ==================== CLAIMING SYSTEM TESTS ====================
 
-    function test_claimKuriAmount() public {
+    function test_claimKuriAmountt() public {
         // Setup: Get all users to join, initialize Kuri, and approve tokens
         _requestMembershipForAllUsers();
         _warpToLaunchPeriodEnd();
@@ -906,7 +910,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
 
         // Expect the KuriSlotClaimed event
-        uint16 intervalIndex = 0; // First interval
+        uint16 intervalIndex = 1; // First interval
         vm.expectEmit(true, true, true, true);
         emit KuriSlotClaimed(user, uint64(block.timestamp), KURI_AMOUNT, intervalIndex);
 
@@ -1176,7 +1180,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
 
     // ==================== SECURITY TESTS ====================
 
-    function test_bitmapOperationsWithHighUserIndices() public {
+    function test_bitmapOperations_withHighUserIndices() public {
         // Test with user indices near the bitmap bucket boundaries
         uint16[] memory testIndices = new uint16[](4);
         testIndices[0] = 255;   // Last index in first bucket
@@ -1340,14 +1344,14 @@ uint256 public constant LINK_BALANCE = 100 ether;
         
         // Call kuriNarukk to initiate raffle
         vm.prank(admin);
-        uint256 requestId = kuriCore.kuriNarukk();
+        kuriCore.kuriNarukk();
         
         // Create random words for the VRF response
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = 123; // This will determine the winner
         
-        // Fulfill the randomness request
-        vrfCoordinatorMock.fulfillRandomWords(requestId, address(kuriCore));
+
+
         
         // Verify a winner was selected
         uint16 intervalIndex = kuriCore.passedIntervalsCounter();

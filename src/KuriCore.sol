@@ -45,13 +45,19 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
 
+    /// @notice Chainlink VRF subscription ID for randomness requests
     uint256 public s_subscriptionId =
         111354311979648395489096536317869612424008220436069067319236829392818402563961;
+    /// @notice Chainlink VRF key hash for randomness requests
     bytes32 public s_keyHash =
         0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
+    /// @notice Address of the Chainlink VRF Coordinator contract
     address public vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
+    /// @notice Gas limit for Chainlink VRF callback
     uint32 public callbackGasLimit = 40000;
+    /// @notice Number of confirmations required for Chainlink VRF requests
     uint16 public requestConfirmations = 3;
+    /// @notice Number of random words to request from Chainlink VRF
     uint32 public numWords = 1;
 
     /**
@@ -128,8 +134,12 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     mapping(uint256 => mapping(uint256 => uint256)) public payments; // month => bitmap
 
+    /// @notice Bitmap to track which users have won a Kuri slot
+    /// @dev Uses a bitmap for gas-efficient storage: bucket => bitmap
     mapping(uint256 => uint256) public wonKuriSlot;
 
+    /// @notice Bitmap to track which users have claimed their Kuri amount
+    /// @dev Uses a bitmap for gas-efficient storage: bucket => bitmap
     mapping(uint256 => uint256) public claimedKuriSlot;
 
     /// @notice Mapping to store user data by address
@@ -358,14 +368,23 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         );
     }
 
+    /**
+     * @notice Initiates a raffle to select a winner for the current interval
+     * @dev Can only be called by an address with the DEFAULT_ADMIN_ROLE
+     * @dev Uses Chainlink VRF to get a random winner
+     * @dev Can only be called after the raffle delay period has passed
+     * @return requestId The ID of the Chainlink VRF request
+     */
     function kuriNarukk()
         public
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (uint256 requestId)
     {
+        // Ensure the raffle delay period has passed
         if (kuriData.nexRaffleTime > block.timestamp)
             revert KuriCore__RaffleDelayNotOver();
 
+        // Request random words from Chainlink VRF
         requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
                 keyHash: s_keyHash,
@@ -380,17 +399,28 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         );
     }
 
-    // fulfillRandomWords function
+    /**
+     * @notice Callback function called by Chainlink VRF with random values
+     * @dev Overrides the function in VRFConsumerBaseV2Plus
+     * @dev Selects a winner based on the random value and updates state
+     * @param requestId The ID of the request that was fulfilled
+     * @param randomWords Array of random values from Chainlink VRF
+     */
     function fulfillRandomWords(
         uint256 requestId,
         uint256[] calldata randomWords
     ) internal override {
-        // transform the result to a number between 1 and userIndexes inclusively
+        // Transform the result to a number between 1 and totalActiveParticipantsCount (inclusive)
         uint16 d20Value = uint16(
             (randomWords[0] % kuriData.totalActiveParticipantsCount) + 1
         );
+
+        // Get the user address from the selected index
         address idtoUser = userIdToAddress[d20Value];
+
+        // Check if the user has already won in a previous interval
         if (!hasWon(idtoUser)) {
+            // Update the next interval deposit time and raffle time
             kuriData.nextIntervalDepositTime = uint48(
                 block.timestamp + kuriData.intervalDuration
             );
@@ -398,8 +428,10 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
                 kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
             );
 
+            // Get the current interval index
             uint16 intervalIndex = passedIntervalsCounter();
 
+            // Emit event with winner information
             emit RaffleWinnerSelected(
                 intervalIndex,
                 uint16(d20Value),
@@ -407,29 +439,51 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
                 uint48(block.timestamp),
                 requestId
             );
+
+            // Update the winner's status in the bitmap
             updateUserKuriSlotStatus(idtoUser);
 
+            // Record the winner for this interval
             intervalToWinnerIndex[intervalIndex] = d20Value;
         } else {
+            // If the selected user has already won, request a new random number
             kuriNarukk();
         }
     }
 
+    /**
+     * @notice Allows a winner to claim their Kuri amount
+     * @dev Verifies the user has won and hasn't already claimed
+     * @dev Transfers the full Kuri amount to the winner
+     * @param intervalIndex The index of the interval for which to claim
+     */
     function claimKuriAmount(uint16 intervalIndex) public {
+        // Verify the user has won a Kuri slot
         if (!hasWon(msg.sender)) revert KuriCore__UserYetToGetASlot();
+
+        // Verify the user hasn't already claimed
         if (!hasClaimed(msg.sender)) revert KuriCore__UserHasClaimedAlready();
+
+        // Verify the interval index is valid
         if (intervalIndex > kuriData.totalParticipantsCount)
             revert KuriCore__InvalidIntervalIndex();
+
+        // Verify the user has made their payment for this interval
         if (!hasPaid(msg.sender, intervalIndex))
             revert KuriCore__UserYetToMakePayments();
 
+        // Emit event for the claim
         emit KuriSlotClaimed(
             msg.sender,
             uint64(block.timestamp),
             kuriData.kuriAmount,
             intervalIndex
         );
+
+        // Update the user's claim status
         updateUserKuriSlotClaimStatus();
+
+        // Transfer the full Kuri amount to the winner
         IERC20(SUPPORTED_TOKEN).transferFrom(
             address(this),
             msg.sender,
@@ -438,34 +492,37 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     }
 
     /**
-     * @notice Updates the kuri slot-claim status for a user
+     * @notice Updates the claim status for a user who has claimed their Kuri amount
      * @dev Uses a bitmap for gas-efficient storage
-     * @dev Each bit in the bitmap represents a user's payment status for a specific interval
+     * @dev Each bit in the bitmap represents whether a user has claimed their Kuri amount
      */
     function updateUserKuriSlotClaimStatus() internal {
+        // Get the user's index
         uint256 userIndex = userToData[msg.sender].userIndex;
 
         // Calculate the bucket and mask for the bitmap
-        uint256 bucket = userIndex >> 8;
-        uint256 mask = 1 << (userIndex & 0xff);
+        uint256 bucket = userIndex >> 8; // Divide by 256 to get the bucket
+        uint256 mask = 1 << (userIndex & 0xff); // Get the bit position within the bucket
 
-        // Set the bit for the user in the current interval
+        // Set the bit for the user in the claimed bitmap
         claimedKuriSlot[bucket] |= mask;
     }
 
     /**
-     * @notice Updates the kuri slot status for a user
+     * @notice Updates the winner status for a user who has won a Kuri slot
      * @dev Uses a bitmap for gas-efficient storage
-     * @dev Each bit in the bitmap represents a user's payment status for a specific interval
+     * @dev Each bit in the bitmap represents whether a user has won a Kuri slot
+     * @param user Address of the user who won
      */
     function updateUserKuriSlotStatus(address user) internal {
+        // Get the user's index
         uint256 userIndex = userToData[user].userIndex;
 
         // Calculate the bucket and mask for the bitmap
-        uint256 bucket = userIndex >> 8;
-        uint256 mask = 1 << (userIndex & 0xff);
+        uint256 bucket = userIndex >> 8; // Divide by 256 to get the bucket
+        uint256 mask = 1 << (userIndex & 0xff); // Get the bit position within the bucket
 
-        // Set the bit for the user in the current interval
+        // Set the bit for the user in the won bitmap
         wonKuriSlot[bucket] |= mask;
     }
 
@@ -475,40 +532,53 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @dev Each bit in the bitmap represents a user's payment status for a specific interval
      */
     function updateUserPaymentStatus() internal {
+        // Get the user's index
         uint256 userIndex = userToData[msg.sender].userIndex;
+
+        // Get the current interval index
         uint16 currentIntervalIndex = passedIntervalsCounter();
 
         // Calculate the bucket and mask for the bitmap
-        uint256 bucket = userIndex >> 8;
-        uint256 mask = 1 << (userIndex & 0xff);
+        uint256 bucket = userIndex >> 8; // Divide by 256 to get the bucket
+        uint256 mask = 1 << (userIndex & 0xff); // Get the bit position within the bucket
 
-        // Set the bit for the user in the current interval
+        // Set the bit for the user in the payment bitmap
         payments[currentIntervalIndex][bucket] |= mask;
     }
 
     /**
-     * @notice Checks if a user have already claimed kuri in this cycle
-     * @dev Uses the bitmap storage to efficiently check payment status
+     * @notice Checks if a user has already claimed their Kuri amount
+     * @dev Uses the bitmap storage to efficiently check claim status
      * @param user Address of the user to check
-     * @return bool True if the user has paid for the interval, false otherwise
+     * @return bool True if the user has claimed, false otherwise
      */
     function hasClaimed(address user) public view returns (bool) {
+        // Get the user's index
         uint256 index = userToData[user].userIndex;
-        uint256 bucket = index >> 8;
-        uint256 mask = 1 << (index & 0xff);
-        return (wonKuriSlot[bucket] & mask) != 0;
+
+        // Calculate the bucket and mask
+        uint256 bucket = index >> 8; // Divide by 256 to get the bucket
+        uint256 mask = 1 << (index & 0xff); // Get the bit position within the bucket
+
+        // Check if the bit is set in the claimed bitmap
+        return (claimedKuriSlot[bucket] & mask) != 0;
     }
 
     /**
-     * @notice Checks if a user have already claimed kuri in this cycle
-     * @dev Uses the bitmap storage to efficiently check payment status
+     * @notice Checks if a user has won a Kuri slot
+     * @dev Uses the bitmap storage to efficiently check winner status
      * @param user Address of the user to check
-     * @return bool True if the user has paid for the interval, false otherwise
+     * @return bool True if the user has won, false otherwise
      */
     function hasWon(address user) public view returns (bool) {
+        // Get the user's index
         uint256 index = userToData[user].userIndex;
-        uint256 bucket = index >> 8;
-        uint256 mask = 1 << (index & 0xff);
+
+        // Calculate the bucket and mask
+        uint256 bucket = index >> 8; // Divide by 256 to get the bucket
+        uint256 mask = 1 << (index & 0xff); // Get the bit position within the bucket
+
+        // Check if the bit is set in the won bitmap
         return (wonKuriSlot[bucket] & mask) != 0;
     }
 
@@ -523,9 +593,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address user,
         uint256 intervalIndex
     ) public view returns (bool) {
+        // Get the user's index
         uint256 index = userToData[user].userIndex;
-        uint256 bucket = index >> 8;
-        uint256 mask = 1 << (index & 0xff);
+
+        // Calculate the bucket and mask
+        uint256 bucket = index >> 8; // Divide by 256 to get the bucket
+        uint256 mask = 1 << (index & 0xff); // Get the bit position within the bucket
+
+        // Check if the bit is set in the payment bitmap
         return (payments[intervalIndex][bucket] & mask) != 0;
     }
 
