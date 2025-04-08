@@ -20,6 +20,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__NotInLaunchState();
     error KuriCore__CallerNotAccepted();
     error KuriCore__UserYetToGetASlot();
+    error KuriCore__KuriFilledAlready();
     error KuriCore__RaffleDelayNotOver();
     error KuriCore__LaunchPeriodNotOver();
     error KuriCore__UserAlreadyDeposited();
@@ -219,7 +220,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         kuriData.creator = msg.sender;
         kuriData.kuriAmount = _kuriAmount;
         kuriData.totalParticipantsCount = _participantCount;
-        kuriData.totalActiveParticipantsCount = 1;
+
         kuriData.launchPeriod = uint48(
             block.timestamp + LAUNCH_PERIOD_DURATION
         );
@@ -259,6 +260,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
                 kuriData.totalParticipantsCount,
                 KuriState.LAUNCHFAILED
             );
+
             // set the state to launch failed
             kuriData.state = KuriState.LAUNCHFAILED;
             return false;
@@ -314,8 +316,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         if (kuriData.launchPeriod < block.timestamp)
             revert KuriCore__AlreadyPastLaunchPeriod();
+        if (
+            kuriData.totalParticipantsCount ==
+            kuriData.totalActiveParticipantsCount
+        ) revert KuriCore__KuriFilledAlready();
 
         userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
+
+        kuriData.totalActiveParticipantsCount++;
 
         // add the user to the accepted list
         userToData[msg.sender] = UserData(
@@ -323,7 +331,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             kuriData.totalActiveParticipantsCount,
             msg.sender
         );
-        kuriData.totalActiveParticipantsCount++;
     }
 
     /**

@@ -134,6 +134,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
     }
 
     function _initializeKuri() internal {
+        console.log("heyye");
         vm.prank(initialiser);
         kuriCore.initialiseKuri();
     }
