@@ -60,7 +60,7 @@ contract HelperConfig is CodeConstants, Script {
 
     function getSepoliaEthConfig()
         public
-        view
+        pure
         returns (NetworkConfig memory sepoliaNetworkConfig)
     {
         sepoliaNetworkConfig = NetworkConfig({
@@ -70,7 +70,7 @@ contract HelperConfig is CodeConstants, Script {
             callbackGasLimit: 500000, // 500,000 gas
             vrfCoordinatorV2_5: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B, // Sepolia VRF Coordinator
             link: 0x779877A7B0D9E8603169DdbD7836e478b4624789, // Sepolia LINK token
-            account: vm.envAddress("METAMASK_PRIVATE_KEY"),
+            account: 0xF941d25cEB9A56f36B2E246eC13C125305544283,
             kuriAmount: 1000e6,
             participantCount: 10,
             initialiser: 0x66aAf3098E1eB1F24348e84F509d8bcfD92D0620,
@@ -80,7 +80,7 @@ contract HelperConfig is CodeConstants, Script {
 
     function getBaseSepoliaConfig()
         public
-        view
+        pure
         returns (NetworkConfig memory baseSepoliaNetworkConfig)
     {
         baseSepoliaNetworkConfig = NetworkConfig({
@@ -90,7 +90,7 @@ contract HelperConfig is CodeConstants, Script {
             callbackGasLimit: 500000, // 500,000 gas
             vrfCoordinatorV2_5: 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE, // Base Sepolia VRF Coordinator
             link: 0xE4aB69C077896252FAFBD49EFD26B5D171A32410, // Base Sepolia LINK token
-            account: vm.envAddress("METAMASK_PRIVATE_KEY"),
+            account: 0xF941d25cEB9A56f36B2E246eC13C125305544283,
             kuriAmount: 1000e6,
             participantCount: 10,
             initialiser: 0x66aAf3098E1eB1F24348e84F509d8bcfD92D0620,

@@ -7,22 +7,25 @@ import {MockERC20} from "../mocks/MockERC20.sol";
 import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 import {LinkToken} from "../mocks/LinkToken.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {DeployKuriCore} from "../../script/DeployKuriCore.s.sol";
+import {CodeConstants,HelperConfig} from "../../script/HelperConfig.s.sol";
 
-contract KuriCoreTest is Test {
+contract KuriCoreTest is Test,CodeConstants {
     KuriCore kuriCore;
+    HelperConfig helperConfig;
     MockERC20 supportedToken;
     VRFCoordinatorV2_5Mock vrfCoordinatorMock;
     LinkToken linkToken;
 
-    // VRF Constants
-    uint96 public constant MOCK_BASE_FEE = 0.25 ether; // 0.25 LINK
-    uint96 public constant MOCK_GAS_PRICE_LINK = 1e9; // 1 gwei LINK
-    uint256 public constant MOCK_WEI_PER_UINT_LINK = 1e18;
-    uint256 public constant LINK_BALANCE = 5 ether;
-    bytes32 public constant GAS_LANE = 0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c;
-    uint32 public constant CALLBACK_GAS_LIMIT = 500000;
-    uint16 public constant REQUEST_CONFIRMATIONS = 3;
-    uint32 public constant NUM_WORDS = 1;
+        uint256 subscriptionId;
+    bytes32 gasLane;
+    uint256 automationUpdateInterval;
+    uint32 callbackGasLimit;
+        
+        address vrfCoordinatorV2_5;
+    LinkToken link;
+
+uint256 public constant LINK_BALANCE = 100 ether;
 
     // Constants
     uint64 public constant KURI_AMOUNT = 10001e6;
@@ -64,10 +67,20 @@ contract KuriCoreTest is Test {
     );
 
     function setUp() public {
+        DeployKuriCore deployer= new DeployKuriCore();
+        (kuriCore,helperConfig)=deployer.run();
+
+                HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+        subscriptionId = config.subscriptionId;
+        gasLane = config.gasLane;
+        automationUpdateInterval = config.automationUpdateInterval;
+        callbackGasLimit = config.callbackGasLimit;
+        vrfCoordinatorV2_5 = config.vrfCoordinatorV2_5;
+        link = LinkToken(config.link);
         // Setup addresses
-        admin = makeAddr("admin");
-        creator = makeAddr("creator");
-        initialiser = makeAddr("initialiser");
+        admin =   config.account;
+        creator = config.account;
+        initialiser = config.initialiser;
 
         // Create test users
         for (uint16 i = 0; i < TOTAL_PARTICIPANTS; i++) {
@@ -87,44 +100,15 @@ contract KuriCoreTest is Test {
             deal(address(SUPPORTED_TOKEN), users[i], INITIAL_USER_BALANCE);
         }
 
-        // Deploy VRF Coordinator Mock
-        vrfCoordinatorMock = new VRFCoordinatorV2_5Mock(
-            MOCK_BASE_FEE,
-            MOCK_GAS_PRICE_LINK,
-            int256(MOCK_WEI_PER_UINT_LINK)
-        );
-        
-        // Deploy Link Token
-        linkToken = new LinkToken();
-        
-        // Create VRF Subscription
-        uint256 subscriptionId = vrfCoordinatorMock.createSubscription();
-        
-        // Fund the subscription
-        vrfCoordinatorMock.fundSubscription(subscriptionId, LINK_BALANCE);
+        link = LinkToken(config.link);
 
-        // Deploy KuriCore contract
-        vm.prank(admin);
-        kuriCore = new KuriCore(
-
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            initialiser,
-            intervalTypeEnum
-        );
-        
-        // // Configure VRF in KuriCore
-        // vm.startPrank(admin);
-        // kuriCore.setVrfCoordinator(address(vrfCoordinatorMock));
-        // kuriCore.setSubscriptionId(subscriptionId);
-        // kuriCore.setKeyHash(GAS_LANE);
-        // kuriCore.setCallbackGasLimit(CALLBACK_GAS_LIMIT);
-        // kuriCore.setRequestConfirmations(REQUEST_CONFIRMATIONS);
-        // kuriCore.setNumWords(NUM_WORDS);
-        // vm.stopPrank();
-        
-        // Add KuriCore as a consumer to the VRF subscription
-        vrfCoordinatorMock.addConsumer(subscriptionId, address(kuriCore));
+        vm.startPrank(msg.sender);
+        if (block.chainid == LOCAL_CHAIN_ID) {
+            link.mint(msg.sender, LINK_BALANCE);
+            VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fundSubscription(subscriptionId, LINK_BALANCE);
+        }
+        link.approve(vrfCoordinatorV2_5, LINK_BALANCE);
+        vm.stopPrank();
     }
 
     // Helper functions

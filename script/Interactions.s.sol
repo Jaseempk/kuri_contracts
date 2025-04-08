@@ -2,12 +2,13 @@
 pragma solidity ^0.8.19;
 
 // import {Script, console} from "forge-std/Script.sol";
-import {Script} from "lib/forge-std/src/Script.sol";
+import {Script, console} from "lib/forge-std/src/Script.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 import {KuriCore} from "../src/KuriCore.sol";
 import {VRFCoordinatorV2_5Mock} from "lib/chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 import {LinkToken} from "../test/mocks/LinkToken.sol";
 import {CodeConstants} from "./HelperConfig.s.sol";
+import {DevOpsTools} from "foundry-devops/DevOpsTools.sol";
 
 /**
  * @title CreateSubscription

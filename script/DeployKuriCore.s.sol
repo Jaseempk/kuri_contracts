@@ -48,8 +48,8 @@ contract DeployKuriCore is CodeConstants, Script {
         KuriCore kuriCore = new KuriCore(
             config.kuriAmount,
             config.participantCount,
-            config.initializer,
-            config.someinterval
+            config.initialiser,
+            config.intervalType
         );
 
         vm.stopBroadcast();
