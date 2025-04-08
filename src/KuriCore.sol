@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {VRFConsumerBaseV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFV2PlusClient} from "chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
 /**
  * @title KuriCore
@@ -11,12 +13,13 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
  * periodically and take turns receiving the pool. It includes membership management,
  * payment tracking, and role-based access control.
  */
-contract KuriCore is AccessControl {
+contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     //error messages
     error KuriCore__NoActiveKuri();
     error KuriCore__AlreadyRejected();
     error KuriCore__NotInLaunchState();
     error KuriCore__CallerNotAccepted();
+    error KuriCore__RaffleDelayNotOver();
     error KuriCore__LaunchPeriodNotOver();
     error KuriCore__UserAlreadyDeposited();
     error KuriCore__AlreadyPastLaunchPeriod();
@@ -37,6 +40,14 @@ contract KuriCore is AccessControl {
     /// @notice Address of the token used for deposits(USDC in our case)
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
+
+    uint256 s_subscriptionId;
+    bytes32 s_keyHash =
+        0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
+    address vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
+    uint32 callbackGasLimit = 40000;
+    uint16 requestConfirmations = 3;
+    uint32 numWords = 1;
 
     /**
      * @notice Enum representing the possible states of a Kuri
@@ -99,10 +110,9 @@ contract KuriCore is AccessControl {
     struct UserData {
         UserState userState; // Current state of the user
         uint16 userIndex; // Index of the user in the participants list
+        address userAddress; // Address of the user
     }
 
-    /// @notice Mapping to store user data by address
-    mapping(address => UserData) public userToData;
     /// @notice Main Kuri data structure
     Kuri public kuriData;
 
@@ -112,6 +122,25 @@ contract KuriCore is AccessControl {
      * where each bit in the bitmap represents whether a user has paid
      */
     mapping(uint256 => mapping(uint256 => uint256)) public payments; // month => bitmap
+
+    mapping(uint256 => uint256) public kuriClaimed;
+
+    /// @notice Mapping to store user data by address
+    mapping(address => UserData) public userToData;
+
+    /// @notice Mapping to store user addresses by index
+    mapping(uint16 => address) public userIdToAddress;
+
+    /// @notice Mapping to store raflfle winners by interval index
+    mapping(uint16 => uint16) public intervalToWinnerIndex;
+
+    event RaffleWinnerSelected(
+        uint16 intervalIndex,
+        uint16 winnerIndex,
+        address winnerAddress,
+        uint48 winnerTimestamp,
+        uint256 requestId
+    );
 
     /**
      * @notice Emitted when a Kuri is successfully initialized
@@ -163,8 +192,9 @@ contract KuriCore is AccessControl {
         uint64 _kuriAmount,
         uint16 _participantCount,
         address _initialiser,
-        IntervalType _intervalType
-    ) {
+        IntervalType _intervalType,
+        uint256 _subscriptionId
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         kuriData.creator = _creator;
         kuriData.kuriAmount = _kuriAmount;
         kuriData.totalParticipantsCount = _participantCount;
@@ -173,6 +203,7 @@ contract KuriCore is AccessControl {
         );
         kuriData.intervalType = _intervalType;
         kuriData.state = KuriState.INLAUNCH;
+        s_subscriptionId = _subscriptionId;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(INITIALISOR_ROLE, _initialiser);
     }
@@ -262,10 +293,13 @@ contract KuriCore is AccessControl {
         if (kuriData.launchPeriod < block.timestamp)
             revert KuriCore__AlreadyPastLaunchPeriod();
 
+        userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
+
         // add the user to the accepted list
         userToData[msg.sender] = UserData(
             UserState.ACCEPTED,
-            kuriData.totalActiveParticipantsCount
+            kuriData.totalActiveParticipantsCount,
+            msg.sender
         );
         kuriData.totalActiveParticipantsCount++;
     }
@@ -313,6 +347,79 @@ contract KuriCore is AccessControl {
         );
     }
 
+    function kuriNarukk()
+        public
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        returns (uint256 requestId)
+    {
+        if (kuriData.nexRaffleTime > block.timestamp)
+            revert KuriCore__RaffleDelayNotOver();
+
+        requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: s_keyHash,
+                subId: s_subscriptionId,
+                requestConfirmations: requestConfirmations,
+                callbackGasLimit: callbackGasLimit,
+                numWords: numWords,
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
+        );
+    }
+
+    // fulfillRandomWords function
+    function fulfillRandomWords(
+        uint256 requestId,
+        uint256[] calldata randomWords
+    ) internal override {
+        // transform the result to a number between 1 and userIndexes inclusively
+        uint16 d20Value = uint16(
+            (randomWords[0] % kuriData.totalActiveParticipantsCount) + 1
+        );
+        address idtoUser = userIdToAddress[d20Value];
+        if (!hasClaimed(idtoUser)) {
+            kuriData.nextIntervalDepositTime = uint48(
+                block.timestamp + kuriData.intervalDuration
+            );
+            kuriData.nexRaffleTime = uint48(
+                kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
+            );
+
+            uint16 intervalIndex = passedIntervalsCounter();
+
+            emit RaffleWinnerSelected(
+                intervalIndex,
+                uint16(d20Value),
+                userIdToAddress[d20Value],
+                uint48(block.timestamp),
+                requestId
+            );
+            updateUserKuriClaimStatus(idtoUser);
+
+            intervalToWinnerIndex[intervalIndex] = d20Value;
+        } else {
+            kuriNarukk();
+        }
+    }
+
+    /**
+     * @notice Updates the payment status for a user
+     * @dev Uses a bitmap for gas-efficient storage
+     * @dev Each bit in the bitmap represents a user's payment status for a specific interval
+     */
+    function updateUserKuriClaimStatus(address user) internal {
+        uint256 userIndex = userToData[user].userIndex;
+
+        // Calculate the bucket and mask for the bitmap
+        uint256 bucket = userIndex >> 8;
+        uint256 mask = 1 << (userIndex & 0xff);
+
+        // Set the bit for the user in the current interval
+        kuriClaimed[bucket] |= mask;
+    }
+
     /**
      * @notice Updates the payment status for a user
      * @dev Uses a bitmap for gas-efficient storage
@@ -328,6 +435,19 @@ contract KuriCore is AccessControl {
 
         // Set the bit for the user in the current interval
         payments[currentIntervalIndex][bucket] |= mask;
+    }
+
+    /**
+     * @notice Checks if a user have already claimed kuri in this cycle
+     * @dev Uses the bitmap storage to efficiently check payment status
+     * @param user Address of the user to check
+     * @return bool True if the user has paid for the interval, false otherwise
+     */
+    function hasClaimed(address user) public view returns (bool) {
+        uint256 index = userToData[user].userIndex;
+        uint256 bucket = index >> 8;
+        uint256 mask = 1 << (index & 0xff);
+        return (kuriClaimed[bucket] & mask) != 0;
     }
 
     /**
