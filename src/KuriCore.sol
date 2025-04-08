@@ -219,6 +219,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         kuriData.creator = msg.sender;
         kuriData.kuriAmount = _kuriAmount;
         kuriData.totalParticipantsCount = _participantCount;
+        kuriData.totalActiveParticipantsCount = 1;
         kuriData.launchPeriod = uint48(
             block.timestamp + LAUNCH_PERIOD_DURATION
         );

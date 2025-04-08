@@ -139,7 +139,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
     }
 
     function _warpToNextDepositTime() internal {
-        (, , , , , , , uint48 nextIntervalDepositTime, , , ,  ) = kuriCore
+        (, , , , , , , , uint48 nextIntervalDepositTime, , ,   ) = kuriCore
             .kuriData();
 
             console.log("befooooreeeoe:",block.timestamp);
@@ -836,7 +836,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         address winnerAddress = users[3];
 
         // Manually set the winner in the contract state
-        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(6))); // intervalToWinnerIndex mapping is at slot 6
+        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(15))); // intervalToWinnerIndex mapping is at slot 15
         vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
 
         // Manually set the user as having won
@@ -844,7 +844,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
 
@@ -871,7 +871,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
 
@@ -902,7 +902,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
 
@@ -954,12 +954,12 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
 
         // Mark user as having already claimed
-        bytes32 claimedSlot = keccak256(abi.encode(uint256(4))); // claimedKuriSlot mapping is at slot 4
+        bytes32 claimedSlot = keccak256(abi.encode(uint256(12))); // claimedKuriSlot mapping is at slot 12
         bytes32 claimedBucketKey = keccak256(abi.encode(bucket, claimedSlot));
         vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
 
@@ -982,7 +982,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
 
@@ -1005,7 +1005,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
 
@@ -1033,7 +1033,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage
-        bytes32 slot = keccak256(abi.encode(uint256(4))); // claimedKuriSlot mapping is at slot 4
+        bytes32 slot = keccak256(abi.encode(uint256(12))); // claimedKuriSlot mapping is at slot 12
         bytes32 bucketKey = keccak256(abi.encode(bucket, slot));
         vm.store(address(kuriCore), bucketKey, bytes32(mask));
 
@@ -1062,7 +1062,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
         
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
         
@@ -1083,7 +1083,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
 
     function test_userIdToAddressMapping() public {
         // Clear any existing mappings
-        vm.store(address(kuriCore), bytes32(uint256(5)), bytes32(0)); // userIdToAddress mapping is at slot 5
+        vm.store(address(kuriCore), bytes32(uint256(13)), bytes32(0)); // userIdToAddress mapping is at slot 13
 
         // Request membership for users
         for (uint16 i = 0; i < 5; i++) {
@@ -1115,24 +1115,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         }
         
         // 4. Trigger raffle
-        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
-        vm.warp(nexRaffleTime + 1);
-        
-        // Mock VRF coordinator to capture the request
-        vm.mockCall(
-            address(kuriCore),
-            abi.encodeWithSignature(
-                "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
-                abi.encode(
-                    kuriCore.s_keyHash(),
-                    kuriCore.s_subscriptionId(),
-                    kuriCore.requestConfirmations(),
-                    kuriCore.callbackGasLimit(),
-                    kuriCore.numWords()
-                )
-            ),
-            abi.encode(12345) // Mock request ID
-        );
+        skip(kuriCore.RAFFLE_DELAY_DURATION() + 1);
         
         // Call kuriNarukk
         vm.prank(admin);
@@ -1140,12 +1123,12 @@ uint256 public constant LINK_BALANCE = 100 ether;
         kuriCore.kuriNarukk();
         
         // 5. Simulate VRF callback by manually setting the winner
-        uint16 intervalIndex = 0; // First interval
-        uint16 winnerIndex = 3; // 1-indexed (user at index 2)
-        address winnerAddress = users[2];
+        uint16 intervalIndex = 1; // First interval
+        uint16 winnerIndex = 2; // 1-indexed (user at index 2)
+        address winnerAddress = users[1];
         
         // Manually set the winner in the contract state
-        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(6))); // intervalToWinnerIndex mapping is at slot 6
+        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(15))); // intervalToWinnerIndex mapping is at slot 15
         vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
         
         // Manually set the user as having won
@@ -1153,7 +1136,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
         
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
         
@@ -1197,7 +1180,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
             uint256 mask = 1 << (userIndex & 0xff);
             
             // Set the bit directly in storage for wonKuriSlot
-            bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+            bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
             bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
             vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
             
@@ -1205,7 +1188,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
             assertTrue(kuriCore.hasWon(user), "hasWon should work for high indices");
             
             // Test claimedKuriSlot bitmap
-            bytes32 claimedSlot = keccak256(abi.encode(uint256(4))); // claimedKuriSlot mapping is at slot 4
+            bytes32 claimedSlot = keccak256(abi.encode(uint256(12))); // claimedKuriSlot mapping is at slot 12
             bytes32 claimedBucketKey = keccak256(abi.encode(bucket, claimedSlot));
             vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
             
@@ -1227,7 +1210,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 mask = 1 << (userIndex & 0xff);
         
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
         
@@ -1291,7 +1274,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         address winnerAddress = users[3];
         
         // Manually set the winner in the contract state
-        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(6))); // intervalToWinnerIndex mapping is at slot 6
+        bytes32 intervalToWinnerSlot = keccak256(abi.encode(intervalIndex, uint256(15))); // intervalToWinnerIndex mapping is at slot 15
         vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
         
         // Manually set the user as having won
@@ -1299,7 +1282,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
         
-        bytes32 wonSlot = keccak256(abi.encode(uint256(3))); // wonKuriSlot mapping is at slot 3
+        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
         bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
         vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
         
