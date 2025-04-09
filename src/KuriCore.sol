@@ -154,6 +154,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /// @notice Mapping to store raflfle winners by interval index
     mapping(uint16 => uint16) public intervalToWinnerIndex;
 
+    uint16[] public activeIndices;
+
     /**
      * @notice Emitted when a raffle winner is selected for a specific interval
      * @param intervalIndex The index of the interval for which the winner was selected
@@ -307,6 +309,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         emit KuriInitialised(kuriData);
 
+        updateAvailableIndices();
+
         // Set the Kuri state to active
         kuriData.state = KuriState.ACTIVE;
 
@@ -421,58 +425,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     }
 
     /**
-     * @notice Callback function called by Chainlink VRF with random values
-     * @dev Overrides the function in VRFConsumerBaseV2Plus
-     * @dev Selects a winner based on the random value and updates state
-     * @param requestId The ID of the request that was fulfilled
-     * @param randomWords Array of random values from Chainlink VRF
-     */
-    function fulfillRandomWords(
-        uint256 requestId,
-        uint256[] calldata randomWords
-    ) internal override {
-        // Transform the result to a number between 1 and totalActiveParticipantsCount (inclusive)
-        uint16 d20Value = uint16(
-            (randomWords[0] % kuriData.totalActiveParticipantsCount) + 1
-        );
-
-        // Get the user address from the selected index
-        address idtoUser = userIdToAddress[d20Value];
-
-        // Check if the user has already won in a previous interval
-        if (!hasWon(idtoUser)) {
-            // Update the next interval deposit time and raffle time
-            kuriData.nextIntervalDepositTime = uint48(
-                block.timestamp + kuriData.intervalDuration
-            );
-            kuriData.nexRaffleTime = uint48(
-                kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
-            );
-
-            // Get the current interval index
-            uint16 intervalIndex = passedIntervalsCounter();
-
-            // Emit event with winner information
-            emit RaffleWinnerSelected(
-                intervalIndex,
-                uint16(d20Value),
-                userIdToAddress[d20Value],
-                uint48(block.timestamp),
-                requestId
-            );
-
-            // Update the winner's status in the bitmap
-            updateUserKuriSlotStatus(idtoUser);
-
-            // Record the winner for this interval
-            intervalToWinnerIndex[intervalIndex] = d20Value;
-        } else {
-            // If the selected user has already won, request a new random number
-            kuriNarukk();
-        }
-    }
-
-    /**
      * @notice Allows a winner to claim their Kuri amount
      * @dev Verifies the user has won and hasn't already claimed
      * @dev Transfers the full Kuri amount to the winner
@@ -506,6 +458,68 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         // Transfer the full Kuri amount to the winner
         IERC20(SUPPORTED_TOKEN).transfer(msg.sender, kuriData.kuriAmount);
+    }
+
+    /**
+     * @notice Callback function called by Chainlink VRF with random values
+     * @dev Overrides the function in VRFConsumerBaseV2Plus
+     * @dev Selects a winner based on the random value and updates state
+     * @param requestId The ID of the request that was fulfilled
+     * @param randomWords Array of random values from Chainlink VRF
+     */
+    function fulfillRandomWords(
+        uint256 requestId,
+        uint256[] calldata randomWords
+    ) internal override {
+        // Transform the result to a number between 1 and totalActiveParticipantsCount (inclusive)
+        uint16 d20ValueIndex = uint16((randomWords[0] % activeIndices.length));
+
+        uint16 userIndex = activeIndices[d20ValueIndex];
+
+        activeIndices[d20ValueIndex] = activeIndices[activeIndices.length - 1];
+
+        // Get the user address from the selected index
+        address idtoUser = userIdToAddress[userIndex];
+
+        // Update the next interval deposit time and raffle time
+        kuriData.nextIntervalDepositTime = uint48(
+            block.timestamp + kuriData.intervalDuration
+        );
+        kuriData.nexRaffleTime = uint48(
+            kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
+        );
+
+        // Get the current interval index
+        uint16 intervalIndex = passedIntervalsCounter();
+
+        // Emit event with winner information
+        emit RaffleWinnerSelected(
+            intervalIndex,
+            uint16(userIndex),
+            userIdToAddress[userIndex],
+            uint48(block.timestamp),
+            requestId
+        );
+
+        activeIndices.pop();
+
+        // Update the winner's status in the bitmap
+        updateUserKuriSlotStatus(idtoUser);
+
+        // Record the winner for this interval
+        intervalToWinnerIndex[intervalIndex] = userIndex;
+    }
+
+    /**
+     * @notice Internal function to update available indices for participants
+     * @dev Resets the activeIndices array by assigning sequential numbers from 1 to totalParticipantsCount
+     * @dev Used to maintain a list of available participant indices
+     * @dev The indices start from 1 (i + 1) rather than 0
+     */
+    function updateAvailableIndices() internal {
+        for (uint16 i = 0; i < kuriData.totalParticipantsCount; i++) {
+            activeIndices[i] = (i + 1);
+        }
     }
 
     /**
