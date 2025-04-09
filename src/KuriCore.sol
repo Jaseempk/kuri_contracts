@@ -15,10 +15,12 @@ import {VRFV2PlusClient} from "chainlink/contracts/src/v0.8/vrf/dev/libraries/VR
  */
 contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     //error messages
+    error KuriCore__InvalidUser();
     error KuriCore__NoActiveKuri();
     error KuriCore__AlreadyRejected();
     error KuriCore__NotInLaunchState();
     error KuriCore__CallerNotAccepted();
+    error KuriCore__UserAlreadyExists();
     error KuriCore__UserYetToGetASlot();
     error KuriCore__KuriFilledAlready();
     error KuriCore__RaffleDelayNotOver();
@@ -311,6 +313,9 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function requestMembership() external {
         // check if the user is already a member
         if (userToData[msg.sender].userState == UserState.ACCEPTED) return;
+        if (
+            userIdToAddress[kuriData.totalActiveParticipantsCount] == msg.sender
+        ) revert KuriCore__UserAlreadyExists();
         if (kuriData.state != KuriState.INLAUNCH)
             revert KuriCore__CantRequestWhenNotInLaunch();
 
@@ -321,9 +326,9 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             kuriData.totalActiveParticipantsCount
         ) revert KuriCore__KuriFilledAlready();
 
-        userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
-
         kuriData.totalActiveParticipantsCount++;
+
+        userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
 
         // add the user to the accepted list
         userToData[msg.sender] = UserData(
@@ -470,7 +475,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (!hasWon(msg.sender)) revert KuriCore__UserYetToGetASlot();
 
         // Verify the user hasn't already claimed
-        if (!hasClaimed(msg.sender)) revert KuriCore__UserHasClaimedAlready();
+        if (hasClaimed(msg.sender)) revert KuriCore__UserHasClaimedAlready();
 
         // Verify the interval index is valid
         if (intervalIndex > kuriData.totalParticipantsCount)
@@ -492,11 +497,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         updateUserKuriSlotClaimStatus();
 
         // Transfer the full Kuri amount to the winner
-        IERC20(SUPPORTED_TOKEN).transferFrom(
-            address(this),
-            msg.sender,
-            kuriData.kuriAmount
-        );
+        IERC20(SUPPORTED_TOKEN).transfer(msg.sender, kuriData.kuriAmount);
     }
 
     /**
@@ -563,6 +564,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function hasClaimed(address user) public view returns (bool) {
         // Get the user's index
         uint256 index = userToData[user].userIndex;
+        if (index == 0) revert KuriCore__InvalidUser();
 
         // Calculate the bucket and mask
         uint256 bucket = index >> 8; // Divide by 256 to get the bucket
@@ -581,6 +583,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function hasWon(address user) public view returns (bool) {
         // Get the user's index
         uint256 index = userToData[user].userIndex;
+        if (index == 0) revert KuriCore__InvalidUser();
 
         // Calculate the bucket and mask
         uint256 bucket = index >> 8; // Divide by 256 to get the bucket
@@ -603,6 +606,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     ) public view returns (bool) {
         // Get the user's index
         uint256 index = userToData[user].userIndex;
+        if (index == 0) revert KuriCore__InvalidUser();
 
         // Calculate the bucket and mask
         uint256 bucket = index >> 8; // Divide by 256 to get the bucket

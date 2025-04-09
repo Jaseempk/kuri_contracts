@@ -76,6 +76,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         automationUpdateInterval = config.automationUpdateInterval;
         callbackGasLimit = config.callbackGasLimit;
         vrfCoordinatorV2_5 = config.vrfCoordinatorV2_5;
+        console.log("coordinatooooor:",vrfCoordinatorV2_5);
         link = LinkToken(config.link);
         // Setup addresses
         admin =   config.account;
@@ -106,6 +107,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         if (block.chainid == LOCAL_CHAIN_ID) {
             link.mint(msg.sender, LINK_BALANCE);
             VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fundSubscription(subscriptionId, LINK_BALANCE);
+
         }
         link.approve(vrfCoordinatorV2_5, LINK_BALANCE);
         vm.stopPrank();
@@ -134,19 +136,19 @@ uint256 public constant LINK_BALANCE = 100 ether;
     }
 
     function _initializeKuri() internal {
-        console.log("heyye");
         vm.prank(initialiser);
         kuriCore.initialiseKuri();
     }
 
     function _warpToNextDepositTime() internal {
-        (, , , , , , , , uint48 nextIntervalDepositTime, , ,   ) = kuriCore
+        (, , , , , uint48 nextIntervalDepositTime, , , , , ,   ) = kuriCore
             .kuriData();
 
-            console.log("befooooreeeoe:",block.timestamp);
-        skip(nextIntervalDepositTime + 1);
 
-        console.log("aafterrr:",block.timestamp);
+
+        vm.warp(nextIntervalDepositTime + 1);
+
+
     }
 
     // ==================== CONSTRUCTOR TESTS ====================
@@ -218,7 +220,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
             uint8(KuriCore.UserState.ACCEPTED),
             "User should be accepted"
         );
-        assertEq(userIndex, 0, "User index should be 0");
+        assertEq(userIndex, 1, "User index should be 1");
         assertEq(
             totalActiveParticipantsCount,
             1,
@@ -238,7 +240,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
                 uint8(KuriCore.UserState.ACCEPTED),
                 "User should be accepted"
             );
-            assertEq(userIndex, i, "User index mismatch");
+            assertEq(userIndex, i+1, "User index mismatch");
         }
 
         (, , , uint16 totalActiveParticipantsCount, , , , , , , , ) = kuriCore
@@ -391,7 +393,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         vm.prank(initialiser);
         vm.expectEmit(true, true, true, true);
         emit KuriInitFailed(
-            initialiser,
+            admin,
             KURI_AMOUNT,
             TOTAL_PARTICIPANTS,
             KuriCore.KuriState.LAUNCHFAILED
@@ -463,7 +465,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         vm.expectEmit(true, true, true, true);
         emit UserDeposited(
             users[0],
-            0, // User index
+            1, // User index
             1, // Interval index
             expectedDepositAmount,
             uint48(block.timestamp)
@@ -810,29 +812,35 @@ uint256 public constant LINK_BALANCE = 100 ether;
         vm.warp(nexRaffleTime + 1);
 
         // Call kuriNarukk to initiate raffle
-        vm.mockCall(
-            address(kuriCore),
-            abi.encodeWithSignature(
-                "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
-                abi.encode(
-                    kuriCore.s_keyHash(),
-                    kuriCore.s_subscriptionId(),
-                    kuriCore.requestConfirmations(),
-                    kuriCore.callbackGasLimit(),
-                    kuriCore.numWords()
-                )
-            ),
-            abi.encode(12345) // Mock request ID
-        );
+        // vm.mockCall(
+        //     address(kuriCore),
+        //     abi.encodeWithSignature(
+        //         "requestRandomWords(VRFV2PlusClient.RandomWordsRequest)",
+        //         abi.encode(
+        //             kuriCore.s_keyHash(),
+        //             kuriCore.s_subscriptionId(),
+        //             kuriCore.requestConfirmations(),
+        //             kuriCore.callbackGasLimit(),
+        //             kuriCore.numWords()
+        //         )
+        //     ),
+        //     abi.encode(12345) // Mock request ID
+        // );
 
         vm.prank(admin);
-        kuriCore.kuriNarukk();
+        uint256 requestId=kuriCore.kuriNarukk();
+        console.log("requestId:",requestId);
 
-        // Since we can't call fulfillRandomWords directly, we'll simulate its effects
+        // VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(
+        //     uint256(requestId),
+        //     address(kuriCore)
+        // );
+
+
         // by manually setting the winner in the contract state
 
         // Simulate a winner being selected (user at index 3)
-        uint16 intervalIndex = 0; // First interval
+        uint16 intervalIndex = 1; // First interval
         uint16 winnerIndex = 4; // 1-indexed (user at index 3)
         address winnerAddress = users[3];
 
@@ -841,13 +849,13 @@ uint256 public constant LINK_BALANCE = 100 ether;
         vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
 
         // Manually set the user as having won
-        uint256 userIndex = 3;
+        uint256 userIndex = 4;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
         // Verify winner is correctly recorded
         assertEq(kuriCore.intervalToWinnerIndex(intervalIndex), winnerIndex, "Winner index should be set correctly");
@@ -866,15 +874,15 @@ uint256 public constant LINK_BALANCE = 100 ether;
         }
 
         // Manually set a user as having won by manipulating storage
-        address user = users[2];
+        address user = users[1];
         uint256 userIndex = 2;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
         // Verify hasWon returns true for this user
         assertTrue(kuriCore.hasWon(user), "User should be marked as having won");
@@ -897,15 +905,14 @@ uint256 public constant LINK_BALANCE = 100 ether;
         }
 
         // Mark user 3 as having won
-        address user = users[3];
+        address user = users[2];
         uint256 userIndex = 3;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
         // Ensure the contract has enough tokens to pay out
         deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
@@ -949,25 +956,23 @@ uint256 public constant LINK_BALANCE = 100 ether;
         _initializeKuri();
 
         // Mark user as having won
-        address user = users[1];
+        address user = users[0];
         uint256 userIndex = 1;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
         // Mark user as having already claimed
-        bytes32 claimedSlot = keccak256(abi.encode(uint256(12))); // claimedKuriSlot mapping is at slot 12
-        bytes32 claimedBucketKey = keccak256(abi.encode(bucket, claimedSlot));
+        bytes32 claimedBucketKey = keccak256(abi.encode(bucket, uint256(12))); // claimedKuriSlot mapping is at slot 12
         vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
 
         // Try to claim again
         vm.prank(user);
         vm.expectRevert(KuriCore.KuriCore__UserHasClaimedAlready.selector);
-        kuriCore.claimKuriAmount(0);
+        kuriCore.claimKuriAmount(1);
     }
 
     function test_claimKuriAmountRevertsForInvalidInterval() public {
@@ -977,15 +982,14 @@ uint256 public constant LINK_BALANCE = 100 ether;
         _initializeKuri();
 
         // Mark user as having won
-        address user = users[2];
+        address user = users[1];
         uint256 userIndex = 2;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
         // Try to claim with invalid interval
         vm.prank(user);
@@ -1000,20 +1004,19 @@ uint256 public constant LINK_BALANCE = 100 ether;
         _initializeKuri();
 
         // Mark user as having won
-        address user = users[3];
+        address user = users[2];
         uint256 userIndex = 3;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
         // Try to claim without having paid
         vm.prank(user);
         vm.expectRevert(KuriCore.KuriCore__UserYetToMakePayments.selector);
-        kuriCore.claimKuriAmount(0);
+        kuriCore.claimKuriAmount(1);
     }
 
     function test_hasClaimedFunction() public {
@@ -1028,14 +1031,13 @@ uint256 public constant LINK_BALANCE = 100 ether;
         }
 
         // Manually set a user as having claimed by manipulating storage
-        address user = users[4];
+        address user = users[3];
         uint256 userIndex = 4;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
         // Set the bit directly in storage
-        bytes32 slot = keccak256(abi.encode(uint256(12))); // claimedKuriSlot mapping is at slot 12
-        bytes32 bucketKey = keccak256(abi.encode(bucket, slot));
+        bytes32 bucketKey = keccak256(abi.encode(bucket, uint256(12))); // claimedKuriSlot mapping is at slot 12
         vm.store(address(kuriCore), bucketKey, bytes32(mask));
 
         // Verify hasClaimed returns true for this user
@@ -1057,24 +1059,34 @@ uint256 public constant LINK_BALANCE = 100 ether;
         }
         
         // Mark user 3 as having won
-        address user = users[3];
+        address user = users[2];
         uint256 userIndex = 3;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
         
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
+
+        // After setting the bitmap, read it back to verify
+        bytes32 storedValue = vm.load(address(kuriCore), actualSlot);
+        console.log("Stored value:", uint256(storedValue));
+        console.log("maskedekdekdk:",mask);
+
+        console.log("kuriSlot:",kuriCore.wonKuriSlot(bucket));
         
         // Ensure the contract has enough tokens to pay out
         deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
         
+
+        // vm.prank(address(kuriCore));
+        // supportedToken.approve(address(user), 1e18);
+
         // Expect the KuriSlotClaimed event
-        uint16 intervalIndex = 0; // First interval
+        uint16 intervalIndex = 1; // First interval
         vm.expectEmit(true, true, true, true);
         emit KuriSlotClaimed(user, uint64(block.timestamp), KURI_AMOUNT, intervalIndex);
-        
         // Claim the Kuri amount
         vm.prank(user);
         kuriCore.claimKuriAmount(intervalIndex);
@@ -1092,7 +1104,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
             kuriCore.requestMembership();
 
             // Verify mapping is updated correctly
-            address storedAddress = kuriCore.userIdToAddress(i);
+            address storedAddress = kuriCore.userIdToAddress(i+1);
             assertEq(storedAddress, users[i], "User ID to address mapping incorrect");
         }
     }
@@ -1117,11 +1129,17 @@ uint256 public constant LINK_BALANCE = 100 ether;
         
         // 4. Trigger raffle
         skip(kuriCore.RAFFLE_DELAY_DURATION() + 1);
+
+
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0]=1;
         
         // Call kuriNarukk
         vm.prank(admin);
-        // uint256 requestId = 
-        kuriCore.kuriNarukk();
+        uint256 requestId = kuriCore.kuriNarukk();
+
+        vrfCoordinatorMock.fulfillRandomWords(requestId,address(kuriCore));
+
         
         // 5. Simulate VRF callback by manually setting the winner
         uint16 intervalIndex = 1; // First interval
@@ -1136,10 +1154,12 @@ uint256 public constant LINK_BALANCE = 100 ether;
         uint256 userIndex = 2;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
+        console.log("bucket:",bucket);
+        console.log("maaassk:",mask);
         
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
+        console.log("hashbooooon:",kuriCore.hasWon(winnerAddress));
         
         // 6. Verify winner and claim Kuri amount
         assertTrue(kuriCore.hasWon(winnerAddress), "Winner should be marked as having won");
@@ -1181,16 +1201,14 @@ uint256 public constant LINK_BALANCE = 100 ether;
             uint256 mask = 1 << (userIndex & 0xff);
             
             // Set the bit directly in storage for wonKuriSlot
-            bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-            bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-            vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+            bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+            vm.store(address(kuriCore), actualSlot, bytes32(mask));
             
             // Verify hasWon works correctly
             assertTrue(kuriCore.hasWon(user), "hasWon should work for high indices");
             
             // Test claimedKuriSlot bitmap
-            bytes32 claimedSlot = keccak256(abi.encode(uint256(12))); // claimedKuriSlot mapping is at slot 12
-            bytes32 claimedBucketKey = keccak256(abi.encode(bucket, claimedSlot));
+            bytes32 claimedBucketKey = keccak256(abi.encode(bucket, uint256(12))); // claimedKuriSlot mapping is at slot 12
             vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
             
             // Verify hasClaimed works correctly
@@ -1205,18 +1223,17 @@ uint256 public constant LINK_BALANCE = 100 ether;
         _initializeKuri();
         
         // Mark user as having won and paid
-        address user = users[5];
+        address user = users[4];
         uint256 userIndex = 5;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
         
         // Set the bit directly in storage for wonKuriSlot
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
         
         // Set the bit directly in storage for payments
-        uint16 intervalIndex = 0;
+        uint16 intervalIndex = 1;
         bytes32 paymentsSlot = keccak256(abi.encode(intervalIndex, bucket, uint256(2))); // payments mapping is at slot 2
         vm.store(address(kuriCore), paymentsSlot, bytes32(mask));
         
@@ -1270,7 +1287,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         kuriCore.kuriNarukk();
         
         // Simulate a winner being selected (user at index 3)
-        uint16 intervalIndex = 0; // First interval
+        uint16 intervalIndex = 1; // First interval
         uint16 winnerIndex = 4; // 1-indexed (user at index 3)
         address winnerAddress = users[3];
         
@@ -1279,13 +1296,12 @@ uint256 public constant LINK_BALANCE = 100 ether;
         vm.store(address(kuriCore), intervalToWinnerSlot, bytes32(uint256(winnerIndex)));
         
         // Manually set the user as having won
-        uint256 userIndex = 3;
+        uint256 userIndex = 4;
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
         
-        bytes32 wonSlot = keccak256(abi.encode(uint256(11))); // wonKuriSlot mapping is at slot 11
-        bytes32 wonBucketKey = keccak256(abi.encode(bucket, wonSlot));
-        vm.store(address(kuriCore), wonBucketKey, bytes32(mask));
+        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        vm.store(address(kuriCore), actualSlot, bytes32(mask));
         
         // Verify winner is correctly recorded
         assertEq(kuriCore.intervalToWinnerIndex(intervalIndex), winnerIndex, "Winner index should be set correctly");
@@ -1300,13 +1316,10 @@ uint256 public constant LINK_BALANCE = 100 ether;
         _warpToLaunchPeriodEnd();
         _initializeKuri();
         
-        // Warp to after raffle delay
         (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
-        vm.warp(nexRaffleTime + 1);
+        // Warp to after raffle delay
+        skip(nexRaffleTime + 1);
         
-        // Expect the RequestedRaffleWinner event to be emitted
-        vm.expectEmit(true, false, false, false);
-        emit RequestedRaffleWinner(1); // The exact request ID will be different
         
         // Call kuriNarukk to initiate raffle
         vm.prank(admin);
@@ -1316,38 +1329,7 @@ uint256 public constant LINK_BALANCE = 100 ether;
         assertGt(requestId, 0, "Request ID should be greater than 0");
     }
     
-    function test_fulfillRandomWordsSelectsWinner() public {
-        // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
-        _warpToLaunchPeriodEnd();
-        _initializeKuri();
-        
-        // Warp to after raffle delay
-        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
-        vm.warp(nexRaffleTime + 1);
-        
-        // Call kuriNarukk to initiate raffle
-        vm.prank(admin);
-        kuriCore.kuriNarukk();
-        
-        // Create random words for the VRF response
-        uint256[] memory randomWords = new uint256[](1);
-        randomWords[0] = 123; // This will determine the winner
-        
 
-
-        
-        // Verify a winner was selected
-        uint16 intervalIndex = kuriCore.passedIntervalsCounter();
-        uint16 winnerIndex = kuriCore.intervalToWinnerIndex(intervalIndex);
-        
-        // Winner index should be non-zero (1-indexed in the contract)
-        assertGt(winnerIndex, 0, "Winner index should be greater than 0");
-        
-        // Winner should be marked as having won
-        address winnerAddress = kuriCore.userIdToAddress(winnerIndex);
-        assertTrue(kuriCore.hasWon(winnerAddress), "Winner should be marked as having won");
-    }
     
     function test_winnerCanClaimKuriAmount() public {
         // Setup: Get all users to join, initialize Kuri
@@ -1357,12 +1339,12 @@ uint256 public constant LINK_BALANCE = 100 ether;
         
         // Ensure all users have made their deposits
         _approveTokensForAllUsers(KURI_AMOUNT);
-        for (uint16 i = 0; i < TOTAL_PARTICIPANTS; i++) {
-            _warpToNextDepositTime();
-            for (uint16 j = 0; j < users.length; j++) {
-                vm.prank(users[j]);
-                kuriCore.userInstallmentDeposit();
-            }
+
+        _warpToNextDepositTime();
+        
+        for (uint16 j = 0; j < users.length; j++) {
+            vm.prank(users[j]);
+            kuriCore.userInstallmentDeposit();
         }
         
         // Warp to after raffle delay

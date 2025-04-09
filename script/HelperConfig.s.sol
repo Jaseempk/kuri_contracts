@@ -87,7 +87,7 @@ contract HelperConfig is CodeConstants, Script {
             subscriptionId: 111354311979648395489096536317869612424008220436069067319236829392818402563961, // Update this with your subscription ID!
             gasLane: 0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71, // Base Sepolia gas lane
             automationUpdateInterval: 30, // 30 seconds
-            callbackGasLimit: 500000, // 500,000 gas
+            callbackGasLimit: 2500000, // 500,000 gas
             vrfCoordinatorV2_5: 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE, // Base Sepolia VRF Coordinator
             link: 0xE4aB69C077896252FAFBD49EFD26B5D171A32410, // Base Sepolia LINK token
             account: 0xF941d25cEB9A56f36B2E246eC13C125305544283,
@@ -118,19 +118,20 @@ contract HelperConfig is CodeConstants, Script {
                 int256(weiPerUnitLink)
             );
         LinkToken link = new LinkToken();
+        uint256 subscriptionId = vrfCoordinatorV2_5Mock.createSubscription();
         vm.stopBroadcast();
 
         anvilNetworkConfig = NetworkConfig({
-            subscriptionId: 0, // This will be set during deployment
+            subscriptionId: subscriptionId, // This will be set during deployment
             gasLane: 0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c, // doesn't matter for mock
             automationUpdateInterval: 30, // 30 seconds
-            callbackGasLimit: 500000, // 500,000 gas
+            callbackGasLimit: 5000000, // 500,000 gas
             vrfCoordinatorV2_5: address(vrfCoordinatorV2_5Mock),
             link: address(link),
-            account: msg.sender,
+            account: 0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38,
             kuriAmount: 1000e6,
             participantCount: 10,
-            initialiser: 0x66aAf3098E1eB1F24348e84F509d8bcfD92D0620,
+            initialiser: msg.sender,
             intervalType: KuriCore.IntervalType.WEEK
         });
     }
