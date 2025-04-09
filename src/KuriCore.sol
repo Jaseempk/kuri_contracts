@@ -154,6 +154,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /// @notice Mapping to store raflfle winners by interval index
     mapping(uint16 => uint16) public intervalToWinnerIndex;
 
+    /**
+     * @notice Emitted when a raffle winner is selected for a specific interval
+     * @param intervalIndex The index of the interval for which the winner was selected
+     * @param winnerIndex The position/index of the winning entry
+     * @param winnerAddress The address of the winning participant
+     * @param winnerTimestamp The timestamp when the winner was selected
+     * @param requestId The Chainlink VRF request ID associated with winner selection
+     */
     event RaffleWinnerSelected(
         uint16 intervalIndex,
         uint16 winnerIndex,
@@ -284,17 +292,17 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             block.timestamp + kuriData.intervalDuration
         );
 
+        // Calculate the next raffle time
+        kuriData.nexRaffleTime = uint48(
+            kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
+        );
+
         // Calculate the end time based on total intervals
         // total time = interval duration * number of intervals + delay duration * number of intervals
         kuriData.endTime = uint48(
             block.timestamp +
                 ((totalIntervals * kuriData.intervalDuration) +
                     (totalIntervals * RAFFLE_DELAY_DURATION))
-        );
-
-        // Calculate the next raffle time
-        kuriData.nexRaffleTime = uint48(
-            kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
         );
 
         emit KuriInitialised(kuriData);
@@ -678,14 +686,3 @@ interface IERC20 {
 
     function balanceOf(address account) external view returns (uint256);
 }
-
-/**
- * To DOs:
- * nextTimeInterval & nextTimeReferral update logic to be added,my assumption is it would be better off along with the raffle
- *
- * Raffle:
- * takes place after the raffle-delay
- * all the users must have made their payment before we could spin up the raffle.
- * what if there are users yet to make their payments when the raffle-delay is over?
- * for now we must go with the assumption that all the users have made their payments
- */
