@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {VRFConsumerBaseV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
@@ -23,15 +23,19 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__UserAlreadyExists();
     error KuriCore__UserYetToGetASlot();
     error KuriCore__KuriFilledAlready();
+    error KuriCore__UserAlreadyFlagged();
     error KuriCore__RaffleDelayNotOver();
     error KuriCore__LaunchPeriodNotOver();
     error KuriCore__UserAlreadyDeposited();
     error KuriCore__InvalidIntervalIndex();
     error KuriCore__UserHasClaimedAlready();
     error KuriCore__UserYetToMakePayments();
+    error KuriCore__CantFlagForFutureIndex();
+    error KuriCore__CantFlagUserAlreadyPaid();
     error KuriCore__AlreadyPastLaunchPeriod();
     error KuriCore__DepositIntervalNotReached();
     error KuriCore__CantRequestWhenNotInLaunch();
+    error KuriCore__CantWithdrawWhenCycleIsActive();
     error KuriCore__InsufficientActiveParticipantCount();
 
     /// @notice Duration of a weekly interval in seconds (7 days)
@@ -154,6 +158,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /// @notice Mapping to store raflfle winners by interval index
     mapping(uint16 => uint16) public intervalToWinnerIndex;
 
+    mapping(address => bool) public isFlagged;
+
     uint16[] public activeIndices;
 
     /**
@@ -208,12 +214,38 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint48 depositTimestamp
     );
 
+    /**
+     * @notice Emitted when a user claims their KURI tokens from a specific interval
+     * @param user Address of the user claiming the tokens
+     * @param timestamp Time when the claim was executed
+     * @param kuriAmount Amount of KURI tokens claimed
+     * @param intervalIndex Index of the interval from which tokens were claimed
+     */
     event KuriSlotClaimed(
         address user,
         uint64 timestamp,
         uint64 kuriAmount,
         uint16 intervalIndex
     );
+
+    /**
+     * @notice Emitted when a new membership request is submitted
+     * @param user Address of the user requesting membership
+     * @param userIndex Index assigned to the user in the system
+     * @param timestamp Block timestamp when request was made
+     */
+    event MembershipRequested(
+        address user,
+        uint16 userIndex,
+        uint256 timestamp
+    );
+
+    /**
+     * @notice Emitted when a user is flagged for suspicious activity
+     * @param user Address of the flagged user
+     * @param intervalIndex Index of the interval when user was flagged
+     */
+    event UserFlagged(address user, uint16 intervalIndex);
 
     /**
      * @notice Creates a new Kuri instance
@@ -338,6 +370,12 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             kuriData.totalActiveParticipantsCount
         ) revert KuriCore__KuriFilledAlready();
 
+        emit MembershipRequested(
+            msg.sender,
+            kuriData.totalActiveParticipantsCount++,
+            block.timestamp
+        );
+
         kuriData.totalActiveParticipantsCount++;
 
         userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
@@ -445,6 +483,10 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (!hasPaid(msg.sender, intervalIndex))
             revert KuriCore__UserYetToMakePayments();
 
+        if (kuriData.endTime <= block.timestamp) {
+            kuriData.state = KuriState.COMPLETED;
+        }
+
         // Emit event for the claim
         emit KuriSlotClaimed(
             msg.sender,
@@ -458,6 +500,55 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         // Transfer the full Kuri amount to the winner
         IERC20(SUPPORTED_TOKEN).transfer(msg.sender, kuriData.kuriAmount);
+    }
+
+    /**
+     * @notice Allows admin to withdraw tokens after cycle completion
+     * @dev Only callable by admin role when cycle is not active
+     */
+    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (kuriData.endTime > block.timestamp)
+            revert KuriCore__CantWithdrawWhenCycleIsActive();
+
+        if (kuriData.state != KuriState.COMPLETED)
+            revert KuriCore__CantWithdrawWhenCycleIsActive();
+        uint256 balance = IERC20(SUPPORTED_TOKEN).balanceOf(address(this));
+        IERC20(SUPPORTED_TOKEN).transferFrom(
+            address(this),
+            msg.sender,
+            balance
+        );
+    }
+
+    /**
+     * @notice Flags a user as defaulter and removes them from active indices
+     * @dev Only callable by admin. Removes user from activeIndices array and marks them as flagged
+     * @param user Address of the user to be flagged
+     * @param intervalIndex The interval index to check payment status
+     * @custom:throws KuriCore__CantFlagUserAlreadyPaid if user has already paid for the interval
+     * @custom:throws KuriCore__UserAlreadyFlagged if user is already flagged
+     * @custom:access Restricted to DEFAULT_ADMIN_ROLE
+     */
+    function flagUser(
+        address user,
+        uint16 intervalIndex
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint16 userIndex = userToData[user].userIndex;
+        if (hasPaid(user, intervalIndex))
+            revert KuriCore__CantFlagUserAlreadyPaid();
+        if (isFlagged[user] == true) revert KuriCore__UserAlreadyFlagged();
+
+        if (passedIntervalsCounter() < intervalIndex)
+            revert KuriCore__CantFlagForFutureIndex();
+
+        for (uint16 i = 0; i < activeIndices.length; i++) {
+            if (activeIndices[i] == userIndex) {
+                activeIndices[i] = activeIndices[activeIndices.length - 1];
+                isFlagged[user] = true;
+                activeIndices.pop();
+                break;
+            }
+        }
     }
 
     /**
@@ -478,8 +569,13 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         activeIndices[d20ValueIndex] = activeIndices[activeIndices.length - 1];
 
+        uint16 intervalIndex = passedIntervalsCounter();
+
         // Get the user address from the selected index
         address idtoUser = userIdToAddress[userIndex];
+
+        // User is out of the Kuri
+        if (!hasPaid(idtoUser, intervalIndex)) return;
 
         // Update the next interval deposit time and raffle time
         kuriData.nextIntervalDepositTime = uint48(
@@ -488,9 +584,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         kuriData.nexRaffleTime = uint48(
             kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
         );
-
-        // Get the current interval index
-        uint16 intervalIndex = passedIntervalsCounter();
 
         // Emit event with winner information
         emit RaffleWinnerSelected(

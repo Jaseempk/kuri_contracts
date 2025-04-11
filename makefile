@@ -39,17 +39,6 @@ ifeq ($(findstring --network ethereum,$(ARGS)),--network ethereum)
 	NETWORK_ARGS := --rpc-url $(ALCHEMY_RPC_URL) --private-key $(METAMASK_PRIVATE_KEY) --broadcast --verify --etherscan-api-key $(ETHERSCAN_API_KEY) -vvvv
 endif
 
-deploy:
-	@forge script script/DeployThalerSavingsPool.s.sol:DeployThalerSavingsPool $(NETWORK_ARGS)
-
-
-
-
-
-verify:
-	@forge verify-contract --chain-id 84532 --watch --etherscan-api-key $(ETHERSCAN_API_KEY) --compiler-version 0.8.27 0x5AF37fb2fff2d7D0520C80f1eA4F317024d4fc2C src/ThalerSavingsPool.sol:ThalerSavingsPool 
-
-
 createSubscription:
 	@forge script script/Interactions.s.sol:CreateSubscription $(NETWORK_ARGS)
 
@@ -58,3 +47,11 @@ addConsumer:
 
 fundSubscription:
 	@forge script script/Interactions.s.sol:FundSubscription $(NETWORK_ARGS)
+
+deploy:
+	@forge script script/DeployKuriCore.s.sol:DeployKuriCore $(NETWORK_ARGS)
+
+verify:
+	@forge verify-contract --chain-id 84532 --watch --constructor-args `cast abi-encode "constructor(uint64,uint16,address,uint8)" "$(KURIAMOUNT)" "$(PARTICIPANT_COUNT)" "$(INITIALISER)" "$(INTERVAL_TYPE)"` --etherscan-api-key $(ETHERSCAN_API_KEY) --compiler-version 0.8.27 0xe01458baaC78DFf8e64A17955390583AB3f1DC0f src/KuriCore.sol:KuriCore
+
+
