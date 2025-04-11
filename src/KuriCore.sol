@@ -90,7 +90,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     enum UserState {
         NONE,
         ACCEPTED,
-        REJECTED
+        REJECTED,
+        FLAGGED
     }
 
     /**
@@ -157,8 +158,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
     /// @notice Mapping to store raflfle winners by interval index
     mapping(uint16 => uint16) public intervalToWinnerIndex;
-
-    mapping(address => bool) public isFlagged;
 
     uint16[] public activeIndices;
 
@@ -370,13 +369,13 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             kuriData.totalActiveParticipantsCount
         ) revert KuriCore__KuriFilledAlready();
 
+        kuriData.totalActiveParticipantsCount++;
+
         emit MembershipRequested(
             msg.sender,
-            kuriData.totalActiveParticipantsCount++,
+            kuriData.totalActiveParticipantsCount,
             block.timestamp
         );
-
-        kuriData.totalActiveParticipantsCount++;
 
         userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
 
@@ -536,7 +535,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint16 userIndex = userToData[user].userIndex;
         if (hasPaid(user, intervalIndex))
             revert KuriCore__CantFlagUserAlreadyPaid();
-        if (isFlagged[user] == true) revert KuriCore__UserAlreadyFlagged();
+        if (userToData[user].userState == UserState.FLAGGED)
+            revert KuriCore__UserAlreadyFlagged();
 
         if (passedIntervalsCounter() < intervalIndex)
             revert KuriCore__CantFlagForFutureIndex();
@@ -544,7 +544,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         for (uint16 i = 0; i < activeIndices.length; i++) {
             if (activeIndices[i] == userIndex) {
                 activeIndices[i] = activeIndices[activeIndices.length - 1];
-                isFlagged[user] = true;
+                userToData[user].userState = UserState.FLAGGED;
                 activeIndices.pop();
                 break;
             }
@@ -611,7 +611,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     function updateAvailableIndices() internal {
         for (uint16 i = 0; i < kuriData.totalParticipantsCount; i++) {
-            activeIndices[i] = (i + 1);
+            activeIndices.push(i + 1);
         }
     }
 
@@ -772,6 +772,10 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address _initialiser
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         revokeRole(INITIALISOR_ROLE, _initialiser);
+    }
+
+    function getActiveIndicesLength() external view returns (uint256) {
+        return activeIndices.length;
     }
 }
 

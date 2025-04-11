@@ -73,6 +73,8 @@ contract KuriCoreTest is Test, CodeConstants {
         uint256 __requestId
     );
 
+    event UserFlagged(address user, uint16 intervalIndex);
+
     function setUp() public {
         DeployKuriCore deployer = new DeployKuriCore();
         (kuriCore, helperConfig) = deployer.run();
@@ -549,7 +551,7 @@ contract KuriCoreTest is Test, CodeConstants {
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
-        (, , , , , , , , uint48 nextIntervalDepositTime, , , ) = kuriCore
+        (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
             .kuriData();
 
         skip(nextIntervalDepositTime + 1);
@@ -1279,6 +1281,7 @@ contract KuriCoreTest is Test, CodeConstants {
             // Calculate the storage slot for userToData[nonMember]
             bytes32 userToDataSlot = keccak256(abi.encode(user, uint256(13))); // userToData is at slot 14
 
+            console.log("user:", user);
             bytes32 packedData = bytes32(
                 (uint256(uint8(userState))) |
                     (uint256(userIndex) << 8) |
@@ -1669,5 +1672,405 @@ contract KuriCoreTest is Test, CodeConstants {
             mask,
             "Bitmap should have the user's bit set"
         );
+    }
+
+    // ==================== RANDOM SELECTION TESTS ====================
+
+    function test_activeIndicesInitialization() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Check that activeIndices array is initialized with the correct values
+        // We need to directly access the storage since activeIndices is internal
+        uint256 activeIndicesLength = kuriCore.getActiveIndicesLength();
+
+        assertEq(
+            activeIndicesLength,
+            TOTAL_PARTICIPANTS,
+            "activeIndices should contain all participant indices"
+        );
+
+        // Verify the first few and last few indices to ensure they're sequential
+        assertEq(
+            kuriCore.activeIndices(0),
+            1,
+            "First activeIndices element should be 1"
+        );
+        assertEq(
+            kuriCore.activeIndices(1),
+            2,
+            "Second activeIndices element should be 2"
+        );
+        assertEq(
+            kuriCore.activeIndices(activeIndicesLength - 1),
+            TOTAL_PARTICIPANTS,
+            "Last activeIndices element should match total participants"
+        );
+    }
+
+    function test_randomSelectionWithoutReplacement() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to after raffle delay
+        (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+        vm.warp(nexRaffleTime + 1);
+
+        // Trigger first raffle
+        vm.prank(admin);
+        uint256 requestId1 = kuriCore.kuriNarukk();
+
+        // Simulate VRF response for first raffle
+        uint256[] memory randomWords1 = new uint256[](1);
+        randomWords1[0] = 42; // Random value
+
+        // Check activeIndices length decreased by 1
+        assertEq(
+            kuriCore.getActiveIndicesLength(),
+            TOTAL_PARTICIPANTS - 1,
+            "activeIndices should decrease after selection"
+        );
+
+        // Warp to next interval and trigger second raffle
+        vm.warp(
+            nexRaffleTime +
+                kuriCore.WEEKLY_INTERVAL() +
+                kuriCore.RAFFLE_DELAY_DURATION() +
+                1
+        );
+
+        vm.prank(admin);
+        uint256 requestId2 = kuriCore.kuriNarukk();
+
+        // Simulate VRF response for second raffle
+        uint256[] memory randomWords2 = new uint256[](1);
+        randomWords2[0] = 123; // Different random value
+
+        // Check activeIndices length decreased by another 1
+        assertEq(
+            kuriCore.getActiveIndicesLength(),
+            TOTAL_PARTICIPANTS - 2,
+            "activeIndices should decrease after second selection"
+        );
+
+        // Verify that we have unique winners for the two intervals
+        uint16 winner1 = kuriCore.intervalToWinnerIndex(1);
+        uint16 winner2 = kuriCore.intervalToWinnerIndex(2);
+
+        assertTrue(
+            winner1 != winner2,
+            "Winners should be different for different intervals"
+        );
+    }
+
+    function test_completeRandomSelectionCycle() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Array to track winners
+        uint16[] memory winners = new uint16[](TOTAL_PARTICIPANTS);
+
+        // Run through all intervals and select winners
+        for (uint16 i = 0; i < TOTAL_PARTICIPANTS; i++) {
+            // Warp to appropriate time for this interval
+            (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+            vm.warp(nexRaffleTime + 1);
+
+            // Trigger raffle
+            vm.prank(admin);
+            uint256 requestId = kuriCore.kuriNarukk();
+
+            // Simulate VRF response
+            uint256[] memory randomWords = new uint256[](1);
+            randomWords[0] = uint256(keccak256(abi.encode(i))); // Different random value for each interval
+
+            // Record winner
+            winners[i] = kuriCore.intervalToWinnerIndex(i + 1);
+
+            // Warp to next interval
+            if (i < TOTAL_PARTICIPANTS - 1) {
+                vm.warp(
+                    nexRaffleTime +
+                        kuriCore.WEEKLY_INTERVAL() +
+                        kuriCore.RAFFLE_DELAY_DURATION() +
+                        1
+                );
+            }
+        }
+
+        // Verify all winners are unique
+        for (uint16 i = 0; i < winners.length; i++) {
+            for (uint16 j = i + 1; j < winners.length; j++) {
+                assertTrue(
+                    winners[i] != winners[j],
+                    string(
+                        abi.encodePacked(
+                            "Winners at indices ",
+                            i,
+                            " and ",
+                            j,
+                            " are the same"
+                        )
+                    )
+                );
+            }
+        }
+
+        // Verify activeIndices is empty after all selections
+        assertEq(
+            kuriCore.getActiveIndicesLength(),
+            0,
+            "activeIndices should be empty after all selections"
+        );
+    }
+
+    // ==================== FLAG USER TESTS ====================
+
+    function test_flagUserSuccess() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to first interval deposit time
+        (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
+            .kuriData();
+        vm.warp(nextIntervalDepositTime + 1);
+
+        // User 0 makes a deposit
+        vm.startPrank(users[0]);
+        supportedToken.approve(address(kuriCore), KURI_AMOUNT);
+        kuriCore.userInstallmentDeposit();
+        vm.stopPrank();
+
+        // User 1 doesn't make a deposit
+
+        // Admin flags user 1 for not paying
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit UserFlagged(users[1], 1);
+        kuriCore.flagUser(users[1], 1);
+
+        // Verify user is flagged
+        (KuriCore.UserState userState, , ) = kuriCore.userToData(users[1]);
+        assertEq(
+            uint8(userState),
+            uint8(KuriCore.UserState.FLAGGED),
+            "User should be flagged"
+        );
+    }
+
+    function test_flagUserRevertsWhenAlreadyPaid() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to first interval deposit time
+        (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
+            .kuriData();
+        vm.warp(nextIntervalDepositTime + 1);
+
+        // User makes a deposit
+        vm.startPrank(users[0]);
+        supportedToken.approve(address(kuriCore), KURI_AMOUNT);
+        kuriCore.userInstallmentDeposit();
+        vm.stopPrank();
+
+        // Try to flag user who has already paid
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__CantFlagUserAlreadyPaid.selector);
+        kuriCore.flagUser(users[0], 1);
+    }
+
+    function test_flagUserRevertsForFutureInterval() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Try to flag user for a future interval
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__CantFlagForFutureIndex.selector);
+        kuriCore.flagUser(users[0], 2); // Second interval hasn't occurred yet
+    }
+
+    function test_flagUserRequiresAdminRole() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Non-admin tries to flag a user
+        vm.prank(users[5]);
+        vm.expectRevert(); // AccessControl will revert
+        kuriCore.flagUser(users[0], 1);
+    }
+
+    // ==================== WITHDRAW TESTS ====================
+
+    function test_withdrawSuccess() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Add some tokens to the contract
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+
+        // Warp to after cycle completion
+        (, , , , , , , , , uint48 endTime, , ) = kuriCore.kuriData();
+        vm.warp(endTime + 1);
+
+        // Set state to COMPLETED
+        bytes32 stateSlot = bytes32(uint256(8)); // kuriData.state is at index 11 in the struct, which is at slot 8
+        vm.store(address(kuriCore), stateSlot, bytes32(uint256(2))); // 2 = COMPLETED
+
+        // Get admin's balance before withdrawal
+        uint256 adminBalanceBefore = supportedToken.balanceOf(admin);
+
+        // Admin withdraws tokens
+        vm.prank(admin);
+        kuriCore.withdraw();
+
+        // Verify tokens were transferred to admin
+        uint256 adminBalanceAfter = supportedToken.balanceOf(admin);
+        assertEq(
+            adminBalanceAfter,
+            adminBalanceBefore + KURI_AMOUNT,
+            "Admin should receive all tokens from contract"
+        );
+
+        // Verify contract balance is zero
+        assertEq(
+            supportedToken.balanceOf(address(kuriCore)),
+            0,
+            "Contract should have zero balance after withdrawal"
+        );
+    }
+
+    function test_withdrawRevertsWhenCycleActive() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Add some tokens to the contract
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+
+        // Try to withdraw while cycle is still active
+        vm.prank(admin);
+        vm.expectRevert(
+            KuriCore.KuriCore__CantWithdrawWhenCycleIsActive.selector
+        );
+        kuriCore.withdraw();
+    }
+
+    function test_withdrawRequiresAdminRole() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Add some tokens to the contract
+        deal(address(SUPPORTED_TOKEN), address(kuriCore), KURI_AMOUNT);
+
+        // Warp to after cycle completion
+        (, , , , , , , , , uint48 endTime, , ) = kuriCore.kuriData();
+        vm.warp(endTime + 1);
+
+        // Set state to COMPLETED
+        bytes32 stateSlot = bytes32(uint256(8)); // kuriData.state is at index 11 in the struct, which is at slot 8
+        vm.store(address(kuriCore), stateSlot, bytes32(uint256(2))); // 2 = COMPLETED
+
+        // Non-admin tries to withdraw
+        vm.prank(users[0]);
+        vm.expectRevert(); // AccessControl will revert
+        kuriCore.withdraw();
+    }
+
+    // ==================== UPDATE AVAILABLE INDICES TESTS ====================
+
+    function test_updateAvailableIndicesReinitializes() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Simulate some selections by directly manipulating activeIndices
+        // We'll do this by completing the entire cycle
+        for (uint16 i = 0; i < TOTAL_PARTICIPANTS; i++) {
+            // Warp to appropriate time for this interval
+            (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
+            vm.warp(nexRaffleTime + 1);
+
+            // Trigger raffle
+            vm.prank(admin);
+            uint256 requestId = kuriCore.kuriNarukk();
+
+            // Simulate VRF response
+            uint256[] memory randomWords = new uint256[](1);
+            randomWords[0] = uint256(keccak256(abi.encode(i)));
+
+            // Warp to next interval
+            if (i < TOTAL_PARTICIPANTS - 1) {
+                vm.warp(
+                    nexRaffleTime +
+                        kuriCore.WEEKLY_INTERVAL() +
+                        kuriCore.RAFFLE_DELAY_DURATION() +
+                        1
+                );
+            }
+        }
+
+        // Verify activeIndices is empty
+        assertEq(
+            kuriCore.getActiveIndicesLength(),
+            0,
+            "activeIndices should be empty after all selections"
+        );
+
+        // Call updateAvailableIndices (indirectly through initialiseKuri)
+        // First we need to reset the contract state
+        bytes32 stateSlot = bytes32(uint256(8)); // kuriData.state is at index 11 in the struct, which is at slot 8
+        vm.store(address(kuriCore), stateSlot, bytes32(uint256(0))); // 0 = LAUNCH
+
+        vm.prank(initialiser);
+        kuriCore.initialiseKuri();
+
+        // Verify activeIndices is reinitialized
+        assertEq(
+            kuriCore.getActiveIndicesLength(),
+            TOTAL_PARTICIPANTS,
+            "activeIndices should be reinitialized with all participants"
+        );
+    }
+
+    // ==================== EVENT TESTS ====================
+
+    function test_userFlaggedEvent() public {
+        // Setup: Get all users to join, initialize Kuri
+        _requestMembershipForAllUsers();
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to first interval deposit time
+        (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
+            .kuriData();
+        vm.warp(nextIntervalDepositTime + 1);
+
+        // Expect the UserFlagged event
+        vm.expectEmit(true, true, true, true);
+        emit UserFlagged(users[1], 1);
+
+        // Admin flags user
+        vm.prank(admin);
+        kuriCore.flagUser(users[1], 1);
     }
 }
