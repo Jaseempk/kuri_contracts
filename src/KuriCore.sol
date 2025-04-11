@@ -541,6 +541,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (passedIntervalsCounter() < intervalIndex)
             revert KuriCore__CantFlagForFutureIndex();
 
+        emit UserFlagged(user, intervalIndex);
+
         for (uint16 i = 0; i < activeIndices.length; i++) {
             if (activeIndices[i] == userIndex) {
                 activeIndices[i] = activeIndices[activeIndices.length - 1];

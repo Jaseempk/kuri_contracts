@@ -1722,7 +1722,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
         // Trigger first raffle
         vm.prank(admin);
-        uint256 requestId1 = kuriCore.kuriNarukk();
+        kuriCore.kuriNarukk();
 
         // Simulate VRF response for first raffle
         uint256[] memory randomWords1 = new uint256[](1);
@@ -1744,7 +1744,8 @@ contract KuriCoreTest is Test, CodeConstants {
         );
 
         vm.prank(admin);
-        uint256 requestId2 = kuriCore.kuriNarukk();
+
+        kuriCore.kuriNarukk();
 
         // Simulate VRF response for second raffle
         uint256[] memory randomWords2 = new uint256[](1);
@@ -1784,7 +1785,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
             // Trigger raffle
             vm.prank(admin);
-            uint256 requestId = kuriCore.kuriNarukk();
+            kuriCore.kuriNarukk();
 
             // Simulate VRF response
             uint256[] memory randomWords = new uint256[](1);
@@ -1929,8 +1930,8 @@ contract KuriCoreTest is Test, CodeConstants {
         vm.warp(endTime + 1);
 
         // Set state to COMPLETED
-        bytes32 stateSlot = bytes32(uint256(8)); // kuriData.state is at index 11 in the struct, which is at slot 8
-        vm.store(address(kuriCore), stateSlot, bytes32(uint256(2))); // 2 = COMPLETED
+        bytes32 stateSlot = keccak256(abi.encode(uint256(7))); // kuriData.state is at index 11 in the struct, which is at slot 8
+        vm.store(address(kuriCore), stateSlot, bytes32(uint256(uint8(3)))); // 2 = COMPLETED
 
         // Get admin's balance before withdrawal
         uint256 adminBalanceBefore = supportedToken.balanceOf(admin);
@@ -1986,8 +1987,8 @@ contract KuriCoreTest is Test, CodeConstants {
         vm.warp(endTime + 1);
 
         // Set state to COMPLETED
-        bytes32 stateSlot = bytes32(uint256(8)); // kuriData.state is at index 11 in the struct, which is at slot 8
-        vm.store(address(kuriCore), stateSlot, bytes32(uint256(2))); // 2 = COMPLETED
+        bytes32 stateSlot = keccak256(abi.encode(uint256(8))); // kuriData.state is at index 11 in the struct, which is at slot 8
+        vm.store(address(kuriCore), stateSlot, bytes32(uint256(3))); // 2 = COMPLETED
 
         // Non-admin tries to withdraw
         vm.prank(users[0]);
@@ -2012,7 +2013,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
             // Trigger raffle
             vm.prank(admin);
-            uint256 requestId = kuriCore.kuriNarukk();
+            kuriCore.kuriNarukk();
 
             // Simulate VRF response
             uint256[] memory randomWords = new uint256[](1);
