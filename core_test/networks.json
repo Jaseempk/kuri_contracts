@@ -1,0 +1,8 @@
+{
+  "base-sepolia": {
+    "KuriCore": {
+      "address": "0xe01458baaC78DFf8e64A17955390583AB3f1DC0f",
+      "startBlock": 24221581
+    }
+  }
+}
