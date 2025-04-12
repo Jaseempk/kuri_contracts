@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {VRFConsumerBaseV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {console} from "forge-std/console.sol";
 
 /**
  * @title KuriCore
@@ -438,7 +439,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @return requestId The ID of the Chainlink VRF request
      */
     function kuriNarukk()
-        public
+        external
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (uint256 requestId)
     {
@@ -467,7 +468,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @dev Transfers the full Kuri amount to the winner
      * @param intervalIndex The index of the interval for which to claim
      */
-    function claimKuriAmount(uint16 intervalIndex) public {
+    function claimKuriAmount(uint16 intervalIndex) external {
         // Verify the user has won a Kuri slot
         if (!hasWon(msg.sender)) revert KuriCore__UserYetToGetASlot();
 
