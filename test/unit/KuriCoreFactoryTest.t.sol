@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {KuriCoreFactory} from "../../src/KuriCoreFactory.sol";
 import {KuriCore} from "../../src/KuriCore.sol";

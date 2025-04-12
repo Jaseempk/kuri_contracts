@@ -1,0 +1,10 @@
+type KuriMarketDeployed @entity(immutable: true) {
+  id: Bytes!
+  caller: Bytes! # address
+  marketAddress: Bytes! # address
+  intervalType: Int! # uint8
+  timestamp: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

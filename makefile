@@ -49,9 +49,10 @@ fundSubscription:
 	@forge script script/Interactions.s.sol:FundSubscription $(NETWORK_ARGS)
 
 deploy:
-	@forge script script/DeployKuriCore.s.sol:DeployKuriCore $(NETWORK_ARGS)
+	@forge script script/DeployKuriCoreFactory.s.sol:DeployKuriCoreFactory $(NETWORK_ARGS)
 
 verify:
-	@forge verify-contract --chain-id 84532 --watch --constructor-args `cast abi-encode "constructor(uint64,uint16,address,uint8)" "$(KURIAMOUNT)" "$(PARTICIPANT_COUNT)" "$(INITIALISER)" "$(INTERVAL_TYPE)"` --etherscan-api-key $(ETHERSCAN_API_KEY) --compiler-version 0.8.27 0xe01458baaC78DFf8e64A17955390583AB3f1DC0f src/KuriCore.sol:KuriCore
+#@forge verify-contract --chain-id 84532 --watch --constructor-args `cast abi-encode "constructor(uint64,uint16,address,uint8)" "$(KURIAMOUNT)" "$(PARTICIPANT_COUNT)" "$(INITIALISER)" "$(INTERVAL_TYPE)"` --etherscan-api-key $(ETHERSCAN_API_KEY) --compiler-version 0.8.27 0xe01458baaC78DFf8e64A17955390583AB3f1DC0f src/KuriCore.sol:KuriCore
+	@forge verify-contract --chain-id 84532 --watch --etherscan-api-key $(ETHERSCAN_API_KEY) --compiler-version 0.8.27 0x4D2155F8136bD8fEBa10ECfcdf82bD97cd78134e src/KuriCoreFactory.sol:KuriCoreFactory
 
 
