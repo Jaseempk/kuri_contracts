@@ -24,3 +24,53 @@ dataSources:
         - event: KuriMarketDeployed(address,address,uint8,uint256)
           handler: handleKuriMarketDeployed
       file: ./src/kuri-core-factory.ts
+
+templates:
+  - kind: ethereum
+    name: KuriCore
+    network: base-sepolia
+    source:
+      abi: KuriCore
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - CoordinatorSet
+        - KuriInitFailed
+        - KuriInitialised
+        - KuriSlotClaimed
+        - OwnershipTransferRequested
+        - OwnershipTransferred
+        - RaffleWinnerSelected
+        - RoleAdminChanged
+        - RoleGranted
+        - RoleRevoked
+        - UserDeposited
+      abis:
+        - name: KuriCore
+          file: ./abis/KuriCore.json
+      eventHandlers:
+        - event: CoordinatorSet(address)
+          handler: handleCoordinatorSet
+        - event: KuriInitFailed(address,uint64,uint16,uint8)
+          handler: handleKuriInitFailed
+        - event: KuriInitialised((address,uint64,uint16,uint16,uint24,uint48,uint48,uint48,uint48,uint48,uint8,uint8))
+          handler: handleKuriInitialised
+        - event: KuriSlotClaimed(address,uint64,uint64,uint16)
+          handler: handleKuriSlotClaimed
+        - event: OwnershipTransferRequested(indexed address,indexed address)
+          handler: handleOwnershipTransferRequested
+        - event: OwnershipTransferred(indexed address,indexed address)
+          handler: handleOwnershipTransferred
+        - event: RaffleWinnerSelected(uint16,uint16,address,uint48,uint256)
+          handler: handleRaffleWinnerSelected
+        - event: RoleAdminChanged(indexed bytes32,indexed bytes32,indexed bytes32)
+          handler: handleRoleAdminChanged
+        - event: RoleGranted(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleGranted
+        - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleRevoked
+        - event: UserDeposited(address,uint256,uint256,uint64,uint48)
+          handler: handleUserDeposited
+      file: ./src/kuri-core.ts
