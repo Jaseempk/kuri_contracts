@@ -18,26 +18,16 @@ contract DeployKuriCore is CodeConstants, Script {
 
         // Handle VRF subscription setup
         if (config.subscriptionId == 0) {
-            console.log(
-                "No subscription ID found. Creating a new subscription..."
-            );
+            console.log("No subscription ID found. Creating a new subscription...");
             CreateSubscription createSubscription = new CreateSubscription();
-            (
-                config.subscriptionId,
-                config.vrfCoordinatorV2_5
-            ) = createSubscription.createSubscription(
-                config.vrfCoordinatorV2_5,
-                config.account
-            );
+            (config.subscriptionId, config.vrfCoordinatorV2_5) =
+                createSubscription.createSubscription(config.vrfCoordinatorV2_5, config.account);
 
             // Fund the subscription
             console.log("Funding the subscription...");
             FundSubscription fundSubscription = new FundSubscription();
             fundSubscription.fundSubscription(
-                config.vrfCoordinatorV2_5,
-                config.subscriptionId,
-                config.link,
-                config.account
+                config.vrfCoordinatorV2_5, config.subscriptionId, config.link, config.account
             );
         }
 
@@ -45,24 +35,15 @@ contract DeployKuriCore is CodeConstants, Script {
         console.log("Deploying KuriCore...");
 
         vm.startBroadcast(config.account);
-        KuriCore kuriCore = new KuriCore(
-            config.kuriAmount,
-            config.participantCount,
-            config.initialiser,
-            config.intervalType
-        );
+        KuriCore kuriCore =
+            new KuriCore(config.kuriAmount, config.participantCount, config.initialiser, config.intervalType);
 
         vm.stopBroadcast();
 
         // Add KuriCore as a consumer to the VRF subscription
         console.log("Adding KuriCore as a consumer to the VRF subscription...");
         AddConsumer addConsumer = new AddConsumer();
-        addConsumer.addConsumer(
-            address(kuriCore),
-            config.vrfCoordinatorV2_5,
-            config.subscriptionId,
-            config.account
-        );
+        addConsumer.addConsumer(address(kuriCore), config.vrfCoordinatorV2_5, config.subscriptionId, config.account);
 
         console.log("KuriCore deployed at: ", address(kuriCore));
         console.log("VRF Subscription ID: ", config.subscriptionId);

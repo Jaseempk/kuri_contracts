@@ -1,0 +1,27 @@
+{
+  "name": "kuri_contracts",
+  "version": "1.0.0",
+  "description": "The Kuri System is a modern implementation of a Rotating Savings and Credit Association (ROSCA) on the blockchain. This system allows community members to form savings groups where everyone contributes funds regularly, and members take turns receiving the entire pool of contributions.",
+  "homepage": "https://github.com/Jaseempk/kuri_contracts#readme",
+  "bugs": {
+    "url": "https://github.com/Jaseempk/kuri_contracts/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jaseempk/kuri_contracts.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@mendable/firecrawl-js": "^1.23.9"
+  }
+}

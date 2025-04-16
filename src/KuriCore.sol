@@ -63,11 +63,11 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /// @notice Address of the Chainlink VRF Coordinator contract
     address public vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
     /// @notice Gas limit for Chainlink VRF callback
-    uint32 public callbackGasLimit = 40000;
+    uint32 public s_callbackGasLimit = 40000;
     /// @notice Number of confirmations required for Chainlink VRF requests
-    uint16 public requestConfirmations = 3;
+    uint16 public s_requestConfirmations = 3;
     /// @notice Number of random words to request from Chainlink VRF
-    uint32 public numWords = 1;
+    uint32 public s_numWords = 1;
 
     /**
      * @notice Enum representing the possible states of a Kuri
@@ -304,10 +304,12 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         returns (bool)
     {
         // Verify the Kuri is in the correct state for initialization
-        if (kuriData.state != KuriState.INLAUNCH)
+        if (kuriData.state != KuriState.INLAUNCH) {
             revert KuriCore__NotInLaunchState();
-        if (kuriData.launchPeriod > block.timestamp)
+        }
+        if (kuriData.launchPeriod > block.timestamp) {
             revert KuriCore__LaunchPeriodNotOver();
+        }
 
         // Check if enough participants have joined
         if (
@@ -373,20 +375,25 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function requestMembership() external {
         // check if the user is already a member
         if (userToData[msg.sender].userState == UserState.ACCEPTED) return;
-        if (userToData[msg.sender].userState == UserState.REJECTED)
+        if (userToData[msg.sender].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
+        }
         if (
             userIdToAddress[kuriData.totalActiveParticipantsCount] == msg.sender
         ) revert KuriCore__UserAlreadyExists();
-        if (kuriData.state != KuriState.INLAUNCH)
+        if (kuriData.state != KuriState.INLAUNCH) {
             revert KuriCore__CantRequestWhenNotInLaunch();
+        }
 
-        if (kuriData.launchPeriod < block.timestamp)
+        if (kuriData.launchPeriod < block.timestamp) {
             revert KuriCore__AlreadyPastLaunchPeriod();
+        }
         if (
             kuriData.totalParticipantsCount ==
             kuriData.totalActiveParticipantsCount
-        ) revert KuriCore__KuriFilledAlready();
+        ) {
+            revert KuriCore__KuriFilledAlready();
+        }
 
         kuriData.totalActiveParticipantsCount++;
 
@@ -415,10 +422,12 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address _user
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_user == address(0)) revert KuriCore__InvalidAddress();
-        if (userToData[_user].userState == UserState.ACCEPTED)
+        if (userToData[_user].userState == UserState.ACCEPTED) {
             revert KuriCore__UserAlreadyAccepted();
-        if (userToData[_user].userState == UserState.REJECTED)
+        }
+        if (userToData[_user].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
+        }
 
         emit UserAccepted(_user, msg.sender);
         userToData[_user].userState = UserState.ACCEPTED;
@@ -433,10 +442,12 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address _user
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_user == address(0)) revert KuriCore__InvalidAddress();
-        if (userToData[_user].userState == UserState.ACCEPTED)
+        if (userToData[_user].userState == UserState.ACCEPTED) {
             revert KuriCore__UserAlreadyAccepted();
-        if (userToData[_user].userState == UserState.REJECTED)
+        }
+        if (userToData[_user].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
+        }
         emit UserRejected(_user, msg.sender);
         userToData[_user].userState = UserState.REJECTED;
     }
@@ -450,16 +461,19 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     function userInstallmentDeposit() external {
         // check if the user is already a member
-        if (userToData[msg.sender].userState != UserState.ACCEPTED)
+        if (userToData[msg.sender].userState != UserState.ACCEPTED) {
             revert KuriCore__CallerNotAccepted();
+        }
         if (kuriData.state != KuriState.ACTIVE) revert KuriCore__NoActiveKuri();
 
-        if (kuriData.nextIntervalDepositTime > block.timestamp)
+        if (kuriData.nextIntervalDepositTime > block.timestamp) {
             revert KuriCore__DepositIntervalNotReached();
+        }
 
         // check if the user has already paid
-        if (hasPaid(msg.sender, passedIntervalsCounter()))
+        if (hasPaid(msg.sender, passedIntervalsCounter())) {
             revert KuriCore__UserAlreadyDeposited();
+        }
 
         // Calculate the amount each user needs to deposit
         uint64 amountToDeposit = kuriData.kuriAmount /
@@ -497,17 +511,18 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         returns (uint256 _requestId)
     {
         // Ensure the raffle delay period has passed
-        if (kuriData.nexRaffleTime > block.timestamp)
+        if (kuriData.nexRaffleTime > block.timestamp) {
             revert KuriCore__RaffleDelayNotOver();
+        }
 
         // Request random words from Chainlink VRF
         _requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
                 keyHash: s_keyHash,
                 subId: s_subscriptionId,
-                requestConfirmations: requestConfirmations,
-                callbackGasLimit: callbackGasLimit,
-                numWords: numWords,
+                requestConfirmations: s_requestConfirmations,
+                callbackGasLimit: s_callbackGasLimit,
+                numWords: s_numWords,
                 extraArgs: VRFV2PlusClient._argsToBytes(
                     VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
                 )
@@ -529,12 +544,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (hasClaimed(msg.sender)) revert KuriCore__UserHasClaimedAlready();
 
         // Verify the interval index is valid
-        if (_intervalIndex > kuriData.totalParticipantsCount)
+        if (_intervalIndex > kuriData.totalParticipantsCount) {
             revert KuriCore__InvalidIntervalIndex();
+        }
 
         // Verify the user has made their payment for this interval
-        if (!hasPaid(msg.sender, _intervalIndex))
+        if (!hasPaid(msg.sender, _intervalIndex)) {
             revert KuriCore__UserYetToMakePayments();
+        }
 
         if (kuriData.endTime <= block.timestamp) {
             kuriData.state = KuriState.COMPLETED;
@@ -560,11 +577,13 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @dev Only callable by admin role when cycle is not active
      */
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (kuriData.endTime > block.timestamp)
+        if (kuriData.endTime > block.timestamp) {
             revert KuriCore__CantWithdrawWhenCycleIsActive();
+        }
 
-        if (kuriData.state != KuriState.COMPLETED)
+        if (kuriData.state != KuriState.COMPLETED) {
             revert KuriCore__CantWithdrawWhenCycleIsActive();
+        }
         uint256 balance = IERC20(SUPPORTED_TOKEN).balanceOf(address(this));
         IERC20(SUPPORTED_TOKEN).transferFrom(
             address(this),
@@ -587,13 +606,16 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint16 _intervalIndex
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint16 userIndex = userToData[_user].userIndex;
-        if (hasPaid(_user, _intervalIndex))
+        if (hasPaid(_user, _intervalIndex)) {
             revert KuriCore__CantFlagUserAlreadyPaid();
-        if (userToData[_user].userState == UserState.FLAGGED)
+        }
+        if (userToData[_user].userState == UserState.FLAGGED) {
             revert KuriCore__UserAlreadyFlagged();
+        }
 
-        if (passedIntervalsCounter() < _intervalIndex)
+        if (passedIntervalsCounter() < _intervalIndex) {
             revert KuriCore__CantFlagForFutureIndex();
+        }
 
         emit UserFlagged(_user, _intervalIndex);
 

@@ -30,12 +30,12 @@ contract LinkToken is ERC20 {
      */
     function transferAndCall(address to, uint256 value, bytes memory data) public returns (bool success) {
         transfer(to, value);
-        
+
         // Check if the recipient is a contract
         if (isContract(to)) {
             contractFallback(to, value, data);
         }
-        
+
         return true;
     }
 
@@ -46,7 +46,8 @@ contract LinkToken is ERC20 {
      * @param data The data to pass to the contract
      */
     function contractFallback(address to, uint256 value, bytes memory data) private {
-        (bool success, ) = to.call(abi.encodeWithSignature("onTokenTransfer(address,uint256,bytes)", msg.sender, value, data));
+        (bool success,) =
+            to.call(abi.encodeWithSignature("onTokenTransfer(address,uint256,bytes)", msg.sender, value, data));
         require(success, "LinkToken: Contract call failed");
     }
 

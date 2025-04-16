@@ -27,10 +27,10 @@ contract CodeConstants {
  */
 contract HelperConfig is CodeConstants, Script {
     /**
-        uint64 kuriAmount;
-        uint16 participantCount;
-        address initialiser;
-        IntervalType intervalType;
+     * uint64 kuriAmount;
+     *     uint16 participantCount;
+     *     address initialiser;
+     *     IntervalType intervalType;
      */
     struct NetworkConfig {
         uint256 subscriptionId;
@@ -58,11 +58,7 @@ contract HelperConfig is CodeConstants, Script {
         }
     }
 
-    function getSepoliaEthConfig()
-        public
-        pure
-        returns (NetworkConfig memory sepoliaNetworkConfig)
-    {
+    function getSepoliaEthConfig() public pure returns (NetworkConfig memory sepoliaNetworkConfig) {
         sepoliaNetworkConfig = NetworkConfig({
             subscriptionId: 0, // Update this with your subscription ID!
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // 30 gwei
@@ -78,11 +74,7 @@ contract HelperConfig is CodeConstants, Script {
         });
     }
 
-    function getBaseSepoliaConfig()
-        public
-        pure
-        returns (NetworkConfig memory baseSepoliaNetworkConfig)
-    {
+    function getBaseSepoliaConfig() public pure returns (NetworkConfig memory baseSepoliaNetworkConfig) {
         baseSepoliaNetworkConfig = NetworkConfig({
             subscriptionId: 111354311979648395489096536317869612424008220436069067319236829392818402563961, // Update this with your subscription ID!
             gasLane: 0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71, // Base Sepolia gas lane
@@ -98,10 +90,7 @@ contract HelperConfig is CodeConstants, Script {
         });
     }
 
-    function getOrCreateAnvilEthConfig()
-        public
-        returns (NetworkConfig memory anvilNetworkConfig)
-    {
+    function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory anvilNetworkConfig) {
         // Check if we already have an anvil config
         if (networkConfig.vrfCoordinatorV2_5 != address(0)) {
             return networkConfig;
@@ -112,11 +101,8 @@ contract HelperConfig is CodeConstants, Script {
         uint256 weiPerUnitLink = MOCK_WEI_PER_UINT_LINK;
 
         vm.startBroadcast();
-        VRFCoordinatorV2_5Mock vrfCoordinatorV2_5Mock = new VRFCoordinatorV2_5Mock(
-                baseFee,
-                gasPriceLink,
-                int256(weiPerUnitLink)
-            );
+        VRFCoordinatorV2_5Mock vrfCoordinatorV2_5Mock =
+            new VRFCoordinatorV2_5Mock(baseFee, gasPriceLink, int256(weiPerUnitLink));
         LinkToken link = new LinkToken();
         uint256 subscriptionId = vrfCoordinatorV2_5Mock.createSubscription();
         vm.stopBroadcast();
@@ -140,9 +126,7 @@ contract HelperConfig is CodeConstants, Script {
         return networkConfig;
     }
 
-    function getConfigByChainId(
-        uint256 chainId
-    ) public view returns (NetworkConfig memory) {
+    function getConfigByChainId(uint256 chainId) public view returns (NetworkConfig memory) {
         if (chainId == SEPOLIA_CHAIN_ID) {
             return getSepoliaEthConfig();
         } else if (chainId == BASE_SEPOLIA_CHAIN_ID) {

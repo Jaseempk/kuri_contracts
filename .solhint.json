@@ -1,0 +1,37 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "func-visibility": ["error", { "ignoreConstructors": false }],
+
+    "compiler-version": ["error", "^0.8.0"],
+    "var-name-mixedcase": "error",
+    "func-name-mixedcase": "error",
+    "contract-name-camelcase": "error",
+
+    "no-unused-vars": "warn",
+    "avoid-sha3": "warn",
+    "avoid-throw": "error",
+    "avoid-low-level-calls": "warn",
+    "avoid-suicide": "error",
+
+    "max-line-length": ["warn", 120],
+    "quotes": ["error", "double"],
+    "indent": ["error", 4],
+    "no-console": "warn",
+    "reason-string": ["warn", { "maxLength": 100 }],
+
+    "mark-callable-contracts": "error",
+    "payable-fallback": "error",
+    "no-empty-blocks": "warn",
+    "not-rely-on-time": "warn",
+    "avoid-tx-origin": "error",
+    "no-inline-assembly": "warn",
+    "check-send-result": "error",
+    "no-global-import": "error",
+    "separate-by-one-line-in-contract": "error",
+    "const-name-snakecase": "warn",
+    "no-empty-interface": "warn",
+    "constructor-syntax": "error",
+    "modifier-name-mixedcase": "error"
+  }
+}

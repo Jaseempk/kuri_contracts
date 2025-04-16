@@ -22,12 +22,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
     address[] public users;
 
     // Events for testing
-    event KuriMarketDeployed(
-        address caller,
-        address marketAddress,
-        uint8 intervalType,
-        uint256 timestamp
-    );
+    event KuriMarketDeployed(address caller, address marketAddress, uint8 intervalType, uint256 timestamp);
 
     function setUp() public {
         DeployKuriCoreFactory deployer = new DeployKuriCoreFactory();
@@ -61,11 +56,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         );
 
         // Create a new KuriCore contract
-        kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
     }
 
     function test_initialiseKuriMarketAsUser() public {
@@ -84,11 +75,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         );
 
         // Create a new KuriCore contract
-        kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
     }
 
     // ==================== INTERVAL TYPE TESTS ====================
@@ -110,11 +97,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
             );
 
             // Create a new KuriCore contract
-            kuriCoreFactory.initialiseKuriMarket(
-                KURI_AMOUNT,
-                TOTAL_PARTICIPANTS,
-                intervalTypes[i]
-            );
+            kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalTypes[i]);
         }
     }
 
@@ -126,11 +109,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         // This should revert because the enum conversion will fail
         vm.expectRevert();
-        kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            invalidIntervalType
-        );
+        kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, invalidIntervalType);
     }
 
     function test_initialiseKuriMarketWithZeroParticipants() public {
@@ -140,11 +119,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         // This should revert in the KuriCore constructor
         vm.expectRevert();
-        kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            zeroParticipants,
-            intervalType
-        );
+        kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, zeroParticipants, intervalType);
     }
 
     function test_initialiseKuriMarketWithZeroAmount() public {
@@ -154,11 +129,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         // This should revert in the KuriCore constructor
         vm.expectRevert(KuriCoreFactory.KCF__InvalidInputs.selector);
-        kuriCoreFactory.initialiseKuriMarket(
-            zeroAmount,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        kuriCoreFactory.initialiseKuriMarket(zeroAmount, TOTAL_PARTICIPANTS, intervalType);
     }
 
     // ==================== INTEGRATION TESTS ====================
@@ -169,11 +140,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         // Create a new KuriCore contract and capture its address
         vm.recordLogs();
-        address deployedAddress = kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        address deployedAddress = kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
 
         // Verify the deployed contract exists and has the correct initial state
         KuriCore deployedKuriCore = KuriCore(deployedAddress);
@@ -194,42 +161,20 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
             KuriCore.KuriState _state
         ) = deployedKuriCore.kuriData();
 
-        assertEq(
-            _creator,
-            address(kuriCoreFactory),
-            "Creator address mismatch"
-        );
+        assertEq(_creator, address(kuriCoreFactory), "Creator address mismatch");
         assertEq(_kuriAmount, KURI_AMOUNT, "Kuri amount mismatch");
-        assertEq(
-            _totalParticipantsCount,
-            TOTAL_PARTICIPANTS,
-            "Total participants count mismatch"
-        );
-        assertEq(
-            _totalActiveParticipantsCount,
-            0,
-            "Initial active participants should be 0"
-        );
+        assertEq(_totalParticipantsCount, TOTAL_PARTICIPANTS, "Total participants count mismatch");
+        assertEq(_totalActiveParticipantsCount, 0, "Initial active participants should be 0");
         assertEq(uint8(_intervalType), intervalType, "Interval type mismatch");
-        assertEq(
-            uint8(_state),
-            uint8(KuriCore.KuriState.INLAUNCH),
-            "Initial state should be INLAUNCH"
-        );
+        assertEq(uint8(_state), uint8(KuriCore.KuriState.INLAUNCH), "Initial state should be INLAUNCH");
 
         // Check roles
         assertTrue(
-            deployedKuriCore.hasRole(
-                deployedKuriCore.DEFAULT_ADMIN_ROLE(),
-                address(kuriCoreFactory)
-            ),
+            deployedKuriCore.hasRole(deployedKuriCore.DEFAULT_ADMIN_ROLE(), address(kuriCoreFactory)),
             "Admin role not granted to creator"
         );
         assertTrue(
-            deployedKuriCore.hasRole(
-                deployedKuriCore.INITIALISOR_ROLE(),
-                address(this)
-            ),
+            deployedKuriCore.hasRole(deployedKuriCore.INITIALISOR_ROLE(), address(this)),
             "Initialiser role not granted to creator"
         );
     }
@@ -240,11 +185,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         // Deploy first contract
         vm.recordLogs();
-        address deployedAddress1 = kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        address deployedAddress1 = kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
 
         // Deploy second contract
         vm.recordLogs();
@@ -255,38 +196,14 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         );
 
         // Verify the addresses are different
-        assertTrue(
-            deployedAddress1 != deployedAddress2,
-            "Deployed contracts should have different addresses"
-        );
+        assertTrue(deployedAddress1 != deployedAddress2, "Deployed contracts should have different addresses");
 
         // Verify the second contract has the correct parameters
         KuriCore deployedKuriCore2 = KuriCore(deployedAddress2);
-        (
-            ,
-            uint64 _kuriAmount,
-            uint16 _totalParticipantsCount,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
+        (, uint64 _kuriAmount, uint16 _totalParticipantsCount,,,,,,,,,) = deployedKuriCore2.kuriData();
 
-        ) = deployedKuriCore2.kuriData();
-
-        assertEq(
-            _kuriAmount,
-            KURI_AMOUNT * 2,
-            "Second contract kuri amount mismatch"
-        );
-        assertEq(
-            _totalParticipantsCount,
-            TOTAL_PARTICIPANTS + 5,
-            "Second contract total participants count mismatch"
-        );
+        assertEq(_kuriAmount, KURI_AMOUNT * 2, "Second contract kuri amount mismatch");
+        assertEq(_totalParticipantsCount, TOTAL_PARTICIPANTS + 5, "Second contract total participants count mismatch");
     }
 
     function test_multipleDeploymentsFromDifferentUsers() public {
@@ -296,46 +213,25 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         // First user deploys a contract
         vm.prank(users[0]);
         vm.recordLogs();
-        address deployedAddress1 = kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        address deployedAddress1 = kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
 
         // Second user deploys a contract
         vm.prank(users[1]);
         vm.recordLogs();
-        address deployedAddress2 = kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        address deployedAddress2 = kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
 
         // Verify the addresses are different
-        assertTrue(
-            deployedAddress1 != deployedAddress2,
-            "Deployed contracts should have different addresses"
-        );
+        assertTrue(deployedAddress1 != deployedAddress2, "Deployed contracts should have different addresses");
 
         // Verify the first contract has the correct creator
         KuriCore deployedKuriCore1 = KuriCore(deployedAddress1);
-        (address _creator1, , , , , , , , , , , ) = deployedKuriCore1
-            .kuriData();
-        assertEq(
-            _creator1,
-            address(kuriCoreFactory),
-            "First contract creator mismatch"
-        );
+        (address _creator1,,,,,,,,,,,) = deployedKuriCore1.kuriData();
+        assertEq(_creator1, address(kuriCoreFactory), "First contract creator mismatch");
 
         // Verify the second contract has the correct creator
         KuriCore deployedKuriCore2 = KuriCore(deployedAddress2);
-        (address _creator2, , , , , , , , , , , ) = deployedKuriCore2
-            .kuriData();
-        assertEq(
-            _creator2,
-            address(kuriCoreFactory),
-            "Second contract creator mismatch"
-        );
+        (address _creator2,,,,,,,,,,,) = deployedKuriCore2.kuriData();
+        assertEq(_creator2, address(kuriCoreFactory), "Second contract creator mismatch");
     }
 
     // ==================== USER FLOW TESTS ====================
@@ -347,11 +243,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         // Deploy a KuriCore contract
         vm.recordLogs();
         vm.prank(users[0]); // First user is the creator
-        address deployedAddress = kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        address deployedAddress = kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
 
         KuriCore deployedKuriCore = KuriCore(deployedAddress);
 
@@ -362,43 +254,17 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
             deployedKuriCore.requestMembership();
 
             // Verify user state
-            (
-                KuriCore.UserState userState,
-                uint16 userIndex,
-
-            ) = deployedKuriCore.userToData(users[i]);
-            assertEq(
-                uint8(userState),
-                uint8(KuriCore.UserState.ACCEPTED),
-                "User should be accepted"
-            );
+            (KuriCore.UserState userState, uint16 userIndex,) = deployedKuriCore.userToData(users[i]);
+            assertEq(uint8(userState), uint8(KuriCore.UserState.ACCEPTED), "User should be accepted");
             assertEq(userIndex, i + 1, "User index mismatch");
         }
 
         // Verify total active participants
-        (
-            ,
-            ,
-            ,
-            uint16 totalActiveParticipantsCount,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-
-        ) = deployedKuriCore.kuriData();
-        assertEq(
-            totalActiveParticipantsCount,
-            TOTAL_PARTICIPANTS,
-            "Active participants count mismatch"
-        );
+        (,,, uint16 totalActiveParticipantsCount,,,,,,,,) = deployedKuriCore.kuriData();
+        assertEq(totalActiveParticipantsCount, TOTAL_PARTICIPANTS, "Active participants count mismatch");
 
         // Warp to after launch period
-        (, , , , , , , uint48 launchPeriod, , , , ) = deployedKuriCore
-            .kuriData();
+        (,,,,,,, uint48 launchPeriod,,,,) = deployedKuriCore.kuriData();
         vm.warp(launchPeriod + 1);
 
         // Initialize Kuri
@@ -407,13 +273,8 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         assertTrue(success, "Initialization should succeed");
 
         // Verify state is now ACTIVE
-        (, , , , , , , , , , , KuriCore.KuriState state) = deployedKuriCore
-            .kuriData();
-        assertEq(
-            uint8(state),
-            uint8(KuriCore.KuriState.ACTIVE),
-            "State should be ACTIVE after initialization"
-        );
+        (,,,,,,,,,,, KuriCore.KuriState state) = deployedKuriCore.kuriData();
+        assertEq(uint8(state), uint8(KuriCore.KuriState.ACTIVE), "State should be ACTIVE after initialization");
     }
 
     function test_failedInitialization() public {
@@ -423,11 +284,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         // Deploy a KuriCore contract
         vm.recordLogs();
         vm.prank(users[0]); // First user is the creator
-        address deployedAddress = kuriCoreFactory.initialiseKuriMarket(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            intervalType
-        );
+        address deployedAddress = kuriCoreFactory.initialiseKuriMarket(KURI_AMOUNT, TOTAL_PARTICIPANTS, intervalType);
 
         KuriCore deployedKuriCore = KuriCore(deployedAddress);
 
@@ -438,8 +295,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         }
 
         // Warp to after launch period
-        (, , , , , , , uint48 launchPeriod, , , , ) = deployedKuriCore
-            .kuriData();
+        (,,,,,,, uint48 launchPeriod,,,,) = deployedKuriCore.kuriData();
         vm.warp(launchPeriod + 1);
 
         // Initialize Kuri - should fail
@@ -448,8 +304,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
         assertFalse(success, "Initialization should fail");
 
         // Verify state is now LAUNCHFAILED
-        (, , , , , , , , , , , KuriCore.KuriState state) = deployedKuriCore
-            .kuriData();
+        (,,,,,,,,,,, KuriCore.KuriState state) = deployedKuriCore.kuriData();
         assertEq(
             uint8(state),
             uint8(KuriCore.KuriState.LAUNCHFAILED),
@@ -459,11 +314,7 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
     // ==================== FUZZ TESTS ====================
 
-    function testFuzz_initialiseKuriMarket(
-        uint64 kuriAmount,
-        uint16 participantCount,
-        uint8 intervalType
-    ) public {
+    function testFuzz_initialiseKuriMarket(uint64 kuriAmount, uint16 participantCount, uint8 intervalType) public {
         // Constrain inputs to reasonable values
         vm.assume(kuriAmount > 0 && kuriAmount < 1e18);
         vm.assume(participantCount > 0 && participantCount < 1000);
@@ -471,17 +322,11 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         // Create a new KuriCore contract
         vm.recordLogs();
-        kuriCoreFactory.initialiseKuriMarket(
-            kuriAmount,
-            participantCount,
-            intervalType
-        );
+        kuriCoreFactory.initialiseKuriMarket(kuriAmount, participantCount, intervalType);
 
         // Extract the deployed contract address from the emitted event
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        address deployedAddress = address(
-            uint160(uint256(entries[0].topics[2]))
-        );
+        address deployedAddress = address(uint160(uint256(entries[0].topics[2])));
 
         // Verify the deployed contract exists and has the correct initial state
         KuriCore deployedKuriCore = KuriCore(deployedAddress);
@@ -504,16 +349,8 @@ contract KuriCoreFactoryTest is Test, CodeConstants {
 
         assertEq(_creator, address(this), "Creator address mismatch");
         assertEq(_kuriAmount, kuriAmount, "Kuri amount mismatch");
-        assertEq(
-            _totalParticipantsCount,
-            participantCount,
-            "Total participants count mismatch"
-        );
+        assertEq(_totalParticipantsCount, participantCount, "Total participants count mismatch");
         assertEq(uint8(_intervalType), intervalType, "Interval type mismatch");
-        assertEq(
-            uint8(_state),
-            uint8(KuriCore.KuriState.INLAUNCH),
-            "Initial state should be INLAUNCH"
-        );
+        assertEq(uint8(_state), uint8(KuriCore.KuriState.INLAUNCH), "Initial state should be INLAUNCH");
     }
 }
