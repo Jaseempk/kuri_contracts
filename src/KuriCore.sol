@@ -21,13 +21,13 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__AlreadyRejected();
     error KuriCore__NotInLaunchState();
     error KuriCore__CallerNotAccepted();
-    error KuriCore__UserAlreadyExists();
     error KuriCore__UserYetToGetASlot();
     error KuriCore__KuriFilledAlready();
     error KuriCore__UserAlreadyFlagged();
     error KuriCore__RaffleDelayNotOver();
     error KuriCore__UserAlreadyAccepted();
     error KuriCore__LaunchPeriodNotOver();
+    error KuriCore__UserAlreadyRequested();
     error KuriCore__UserAlreadyDeposited();
     error KuriCore__InvalidIntervalIndex();
     error KuriCore__UserHasClaimedAlready();
@@ -375,42 +375,39 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function requestMembership() external {
         // check if the user is already a member
         if (userToData[msg.sender].userState == UserState.ACCEPTED) return;
-        if (userToData[msg.sender].userState == UserState.REJECTED) {
+        if (userToData[msg.sender].userState == UserState.REJECTED)
             revert KuriCore__AlreadyRejected();
-        }
+
         if (
             userIdToAddress[kuriData.totalActiveParticipantsCount] == msg.sender
-        ) revert KuriCore__UserAlreadyExists();
-        if (kuriData.state != KuriState.INLAUNCH) {
-            revert KuriCore__CantRequestWhenNotInLaunch();
-        }
+        ) revert KuriCore__UserAlreadyRequested();
 
-        if (kuriData.launchPeriod < block.timestamp) {
+        if (kuriData.state != KuriState.INLAUNCH)
+            revert KuriCore__CantRequestWhenNotInLaunch();
+
+        if (kuriData.launchPeriod < block.timestamp)
             revert KuriCore__AlreadyPastLaunchPeriod();
-        }
+
         if (
             kuriData.totalParticipantsCount ==
             kuriData.totalActiveParticipantsCount
-        ) {
-            revert KuriCore__KuriFilledAlready();
-        }
-
-        kuriData.totalActiveParticipantsCount++;
+        ) revert KuriCore__KuriFilledAlready();
 
         emit MembershipRequested(
             msg.sender,
-            kuriData.totalActiveParticipantsCount,
+            kuriData.totalActiveParticipantsCount + 1,
             block.timestamp
         );
 
-        userIdToAddress[kuriData.totalActiveParticipantsCount] = msg.sender;
+        userIdToAddress[kuriData.totalActiveParticipantsCount + 1] = msg.sender;
 
         // add the user to the accepted list
         userToData[msg.sender] = UserData(
             UserState.ACCEPTED,
-            kuriData.totalActiveParticipantsCount,
+            kuriData.totalActiveParticipantsCount + 1,
             msg.sender
         );
+        kuriData.totalActiveParticipantsCount++;
     }
 
     /**
@@ -428,6 +425,11 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (userToData[_user].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
         }
+        if (kuriData.state != KuriState.INLAUNCH)
+            revert KuriCore__CantRequestWhenNotInLaunch();
+
+        if (kuriData.launchPeriod < block.timestamp)
+            revert KuriCore__AlreadyPastLaunchPeriod();
 
         emit UserAccepted(_user, msg.sender);
         userToData[_user].userState = UserState.ACCEPTED;
@@ -553,8 +555,11 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             revert KuriCore__UserYetToMakePayments();
         }
 
-        if (kuriData.endTime <= block.timestamp) {
-            kuriData.state = KuriState.COMPLETED;
+        if (
+            kuriData.endTime <= block.timestamp &&
+            _intervalIndex == kuriData.totalParticipantsCount
+        ) {
+            kuriData.state = KuriState.COMPLETED; //Marking kuri as completed if the cycle duration have elapsed
         }
 
         // Emit event for the claim
@@ -663,6 +668,9 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             kuriData.nextIntervalDepositTime + RAFFLE_DELAY_DURATION
         );
 
+        // Record the winner for this interval
+        intervalToWinnerIndex[intervalIndex] = userIndex;
+
         // Emit event with winner information
         emit RaffleWinnerSelected(
             intervalIndex,
@@ -676,9 +684,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         // Update the winner's status in the bitmap
         _updateUserKuriSlotStatus(idtoUser);
-
-        // Record the winner for this interval
-        intervalToWinnerIndex[intervalIndex] = userIndex;
     }
 
     /**
