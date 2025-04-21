@@ -24,6 +24,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__CallerNotAccepted();
     error KuriCore__UserYetToGetASlot();
     error KuriCore__KuriFilledAlready();
+    error KuriCore__InvalidUserRequest();
     error KuriCore__UserAlreadyFlagged();
     error KuriCore__RaffleDelayNotOver();
     error KuriCore__UserAlreadyAccepted();
@@ -337,7 +338,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         kuriData.intervalDuration = kuriData.intervalType == IntervalType.WEEK
             ? uint24(WEEKLY_INTERVAL)
             : uint24(MONTHLY_INTERVAL);
-        console.log("intervalDUration:", kuriData.intervalDuration);
 
         // Calculate the next interval deposit time
         kuriData.nextIntervalDepositTime = uint48(
@@ -375,7 +375,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function requestMembership() external {
         // check if the user is already a member
         if (userToData[msg.sender].userState == UserState.ACCEPTED) return;
-        console.log("looi");
+
         if (userToData[msg.sender].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
         }
@@ -391,8 +391,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (kuriData.launchPeriod < block.timestamp) {
             revert KuriCore__AlreadyPastLaunchPeriod();
         }
-
         emit MembershipRequested(msg.sender, block.timestamp);
+        userToData[msg.sender].userAddress = msg.sender;
     }
 
     /**
@@ -410,6 +410,11 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         ) {
             revert KuriCore__KuriFilledAlready();
         }
+
+        if (userToData[_user].userAddress != _user) {
+            revert KuriCore__InvalidUserRequest();
+        }
+
         if (userToData[_user].userState == UserState.ACCEPTED) {
             revert KuriCore__UserAlreadyAccepted();
         }
@@ -479,7 +484,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (kuriData.nextIntervalDepositTime > block.timestamp) {
             revert KuriCore__DepositIntervalNotReached();
         }
-
+        console.log("interaval:index:", passedIntervalsCounter());
         // check if the user has already paid
         if (hasPaid(msg.sender, passedIntervalsCounter())) {
             revert KuriCore__UserAlreadyDeposited();

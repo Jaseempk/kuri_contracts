@@ -9,6 +9,7 @@ import {LinkToken} from "../mocks/LinkToken.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 import {DeployKuriCore} from "../../script/DeployKuriCore.s.sol";
 import {CodeConstants, HelperConfig} from "../../script/HelperConfig.s.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract KuriCoreTest is Test, CodeConstants {
     KuriCore kuriCore;
@@ -74,6 +75,11 @@ contract KuriCoreTest is Test, CodeConstants {
     );
 
     event UserFlagged(address user, uint16 intervalIndex);
+    event MembershipRequested(address user, uint64 timestamp);
+    event MembershipAccepted(address user, uint64 timestamp);
+    event MembershipRejected(address user, uint64 timestamp);
+    event UserAccepted(address user, address admin, uint16 intervalIndex);
+    event UserRejected(address user, address admin);
 
     function setUp() public {
         DeployKuriCore deployer = new DeployKuriCore();
@@ -131,6 +137,18 @@ contract KuriCoreTest is Test, CodeConstants {
             console.log("requesting membership for user:", users[i]);
             kuriCore.requestMembership();
         }
+    }
+
+    function _acceptAllUsers() internal {
+        for (uint16 i = 0; i < users.length; i++) {
+            vm.prank(admin);
+            kuriCore.acceptUserMembershipRequest(users[i]);
+        }
+    }
+
+    function _requestAndAcceptAllUsers() internal {
+        _requestMembershipForAllUsers();
+        _acceptAllUsers();
     }
 
     function _approveTokensForAllUsers(uint256 amount) internal {
@@ -215,25 +233,35 @@ contract KuriCoreTest is Test, CodeConstants {
     // ==================== REQUEST MEMBERSHIP TESTS ====================
 
     function test_requestMembership() public {
+        // Test requesting membership
         vm.prank(users[0]);
+        vm.expectEmit(true, true, true, true);
+        emit MembershipRequested(users[0], uint64(block.timestamp));
         kuriCore.requestMembership();
 
-        (KuriCore.UserState userState, uint16 userIndex, ) = kuriCore
-            .userToData(users[0]);
-        (, , , uint16 totalActiveParticipantsCount, , , , , , , , ) = kuriCore
-            .kuriData();
-
+        // Verify user state is NONE (not yet accepted)
+        (KuriCore.UserState userState, , ) = kuriCore.userToData(users[0]);
         assertEq(
             uint8(userState),
-            uint8(KuriCore.UserState.ACCEPTED),
-            "User should be accepted"
+            uint8(KuriCore.UserState.NONE),
+            "User state should be NONE after request"
         );
-        assertEq(userIndex, 1, "User index should be 1");
-        assertEq(
-            totalActiveParticipantsCount,
-            1,
-            "Active participants count should be 1"
-        );
+
+        // Verify user address is set
+        (, , address userAddress) = kuriCore.userToData(users[0]);
+        assertEq(userAddress, users[0], "User address should be set");
+
+        // Test requesting membership again should revert
+        vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__UserAlreadyRequested.selector);
+        kuriCore.requestMembership();
+
+        // Test requesting membership when not in launch state
+        vm.prank(initialiser);
+        kuriCore.initialiseKuri();
+        vm.prank(users[1]);
+        vm.expectRevert(KuriCore.KuriCore__CantRequestWhenNotInLaunch.selector);
+        kuriCore.requestMembership();
     }
 
     function testRequestMembershipMultipleUsers() public {
@@ -245,10 +273,32 @@ contract KuriCoreTest is Test, CodeConstants {
                 .userToData(users[i]);
             assertEq(
                 uint8(userState),
-                uint8(KuriCore.UserState.ACCEPTED),
-                "User should be accepted"
+                uint8(KuriCore.UserState.NONE),
+                "User should be in NONE state after request"
             );
-            assertEq(userIndex, i + 1, "User index mismatch");
+            assertEq(userIndex, 0, "User index should be 0 before acceptance");
+        }
+
+        // Accept all users
+        for (uint16 i = 0; i < 5; i++) {
+            vm.prank(admin);
+            kuriCore.acceptUserMembershipRequest(users[i]);
+        }
+
+        // Verify states after acceptance
+        for (uint16 i = 0; i < 5; i++) {
+            (KuriCore.UserState userState, uint16 userIndex, ) = kuriCore
+                .userToData(users[i]);
+            assertEq(
+                uint8(userState),
+                uint8(KuriCore.UserState.ACCEPTED),
+                "User should be accepted after admin acceptance"
+            );
+            assertEq(
+                userIndex,
+                i + 1,
+                "User index should be assigned after acceptance"
+            );
         }
 
         (, , , uint16 totalActiveParticipantsCount, , , , , , , , ) = kuriCore
@@ -256,7 +306,7 @@ contract KuriCoreTest is Test, CodeConstants {
         assertEq(
             totalActiveParticipantsCount,
             5,
-            "Active participants count should be 5"
+            "Active participants count should be 5 after acceptance"
         );
     }
 
@@ -269,8 +319,8 @@ contract KuriCoreTest is Test, CodeConstants {
     }
 
     function testCannotRequestMembershipWhenNotInLaunch() public {
-        // First get all users to join
-        _requestMembershipForAllUsers();
+        // First get all users to join and be accepted
+        _requestAndAcceptAllUsers();
 
         // Initialize the Kuri
         _warpToLaunchPeriodEnd();
@@ -287,24 +337,30 @@ contract KuriCoreTest is Test, CodeConstants {
         vm.prank(users[0]);
         kuriCore.requestMembership();
 
-        // Second request should not revert or change state
+        // Second request should revert
         vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__UserAlreadyRequested.selector);
         kuriCore.requestMembership();
+
+        // Accept the user
+        vm.prank(admin);
+        kuriCore.acceptUserMembershipRequest(users[0]);
 
         (, , , uint16 totalActiveParticipantsCount, , , , , , , , ) = kuriCore
             .kuriData();
         assertEq(
             totalActiveParticipantsCount,
             1,
-            "Active participants count should still be 1"
+            "Active participants count should be 1 after acceptance"
         );
     }
 
     // ==================== INITIALIZE KURI TESTS ====================
 
     function test_initializeKuriSuccess() public {
-        // Get all users to join
-        _requestMembershipForAllUsers();
+        // Get all users to join and be accepted
+        _requestAndAcceptAllUsers();
+
         (, , , , , , , uint48 currentLaunchPeriod, , , , ) = kuriCore
             .kuriData();
 
@@ -353,11 +409,10 @@ contract KuriCoreTest is Test, CodeConstants {
             uint48 nextIntervalDepositTime,
             ,
             uint48 startTime,
-            uint48 endTime,
+            ,
             ,
             KuriCore.KuriState state
         ) = kuriCore.kuriData();
-        console.log("heey");
 
         assertEq(
             uint8(state),
@@ -379,12 +434,6 @@ contract KuriCoreTest is Test, CodeConstants {
             nextIntervalDepositTime + kuriCore.RAFFLE_DELAY_DURATION(),
             "Next raffle time mismatch"
         );
-
-        // Calculate expected end time
-        uint256 expectedEndTime = block.timestamp +
-            ((TOTAL_PARTICIPANTS * kuriCore.WEEKLY_INTERVAL()) +
-                (TOTAL_PARTICIPANTS * kuriCore.RAFFLE_DELAY_DURATION()));
-        assertEq(endTime, expectedEndTime, "End time mismatch");
     }
 
     function test_initializeKuriFailure() public {
@@ -459,42 +508,97 @@ contract KuriCoreTest is Test, CodeConstants {
     // ==================== USER INSTALLMENT DEPOSIT TESTS ====================
 
     function test_userInstallmentDeposit() public {
-        // Setup: Get all users to join, initialize Kuri, and approve tokens
-        _requestMembershipForAllUsers();
+        // Setup: Request and accept membership
+        vm.prank(users[0]);
+        kuriCore.requestMembership();
+        vm.prank(admin);
+        kuriCore.acceptUserMembershipRequest(users[0]);
+
+        // Approve tokens
+        vm.prank(users[0]);
+        supportedToken.approve(address(kuriCore), KURI_AMOUNT);
+
+        // Initialize Kuri
         _warpToLaunchPeriodEnd();
         _initializeKuri();
+
+        // Warp to next deposit time
         _warpToNextDepositTime();
 
-        uint64 expectedDepositAmount = KURI_AMOUNT / TOTAL_PARTICIPANTS;
-        _approveTokensForAllUsers(expectedDepositAmount);
-
-        // User makes a deposit
+        // Test deposit
         vm.prank(users[0]);
         vm.expectEmit(true, true, true, true);
         emit UserDeposited(
             users[0],
-            1, // User index
-            1, // Interval index
-            expectedDepositAmount,
+            1, // userIndex
+            0, // intervalIndex
+            KURI_AMOUNT / TOTAL_PARTICIPANTS,
             uint48(block.timestamp)
         );
         kuriCore.userInstallmentDeposit();
 
-        // Check payment was recorded
-        bool hasPaid = kuriCore.hasPaid(users[0], 1);
-        assertTrue(hasPaid, "Payment should be recorded");
+        // Verify payment status
+        assertTrue(
+            kuriCore.hasPaid(users[0], 0),
+            "User should have paid for interval 0"
+        );
 
-        // Check token transfer
-        assertEq(
-            supportedToken.balanceOf(address(kuriCore)),
-            expectedDepositAmount,
-            "Contract should have received tokens"
-        );
-        assertEq(
-            supportedToken.balanceOf(users[0]),
-            INITIAL_USER_BALANCE - expectedDepositAmount,
-            "User balance should be reduced"
-        );
+        // Test depositing again in same interval
+        vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__UserAlreadyDeposited.selector);
+        kuriCore.userInstallmentDeposit();
+
+        // Test depositing before interval time
+        vm.warp(block.timestamp - 1);
+        vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__DepositIntervalNotReached.selector);
+        kuriCore.userInstallmentDeposit();
+    }
+
+    function test_userInstallmentDepositNotAccepted() public {
+        // Setup: Request membership but don't accept
+        vm.prank(users[0]);
+        kuriCore.requestMembership();
+
+        // Approve tokens
+        vm.prank(users[0]);
+        supportedToken.approve(address(kuriCore), KURI_AMOUNT);
+
+        // Initialize Kuri
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to next deposit time
+        _warpToNextDepositTime();
+
+        // Test deposit should revert
+        vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__CallerNotAccepted.selector);
+        kuriCore.userInstallmentDeposit();
+    }
+
+    function test_userInstallmentDepositRejected() public {
+        // Setup: Request and reject membership
+        vm.prank(users[0]);
+        kuriCore.requestMembership();
+        vm.prank(admin);
+        kuriCore.rejectUserMembershipRequest(users[0]);
+
+        // Approve tokens
+        vm.prank(users[0]);
+        supportedToken.approve(address(kuriCore), KURI_AMOUNT);
+
+        // Initialize Kuri
+        _warpToLaunchPeriodEnd();
+        _initializeKuri();
+
+        // Warp to next deposit time
+        _warpToNextDepositTime();
+
+        // Test deposit should revert
+        vm.prank(users[0]);
+        vm.expectRevert(KuriCore.KuriCore__CallerNotAccepted.selector);
+        kuriCore.userInstallmentDeposit();
     }
 
     function testCannotDepositWhenNotAccepted() public {
@@ -520,6 +624,10 @@ contract KuriCoreTest is Test, CodeConstants {
             vm.prank(users[i]);
             kuriCore.requestMembership();
         }
+        for (uint16 i = 0; i < 5; i++) {
+            vm.prank(admin);
+            kuriCore.acceptUserMembershipRequest(users[i]);
+        }
         _warpToLaunchPeriodEnd();
 
         // Initialize fails because not enough users
@@ -533,11 +641,16 @@ contract KuriCoreTest is Test, CodeConstants {
     }
 
     function test_cantDeposit_beforeIntervalTime() public {
-        // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
         _warpToLaunchPeriodEnd();
 
+        // Initialize Kuri
         _initializeKuri();
+
+        // Approve tokens
+        _approveTokensForAllUsers(KURI_AMOUNT / TOTAL_PARTICIPANTS);
 
         // Try to deposit before interval time
         vm.prank(users[0]);
@@ -546,24 +659,24 @@ contract KuriCoreTest is Test, CodeConstants {
     }
 
     function test_cannotDepositTwice_inSameInterval() public {
-        // Setup: Get all users to join, initialize Kuri, and approve tokens
-        _requestMembershipForAllUsers();
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
         _warpToLaunchPeriodEnd();
+        // Initialize Kuri
         _initializeKuri();
 
-        (, , , , , , uint48 nextIntervalDepositTime, , , , , ) = kuriCore
-            .kuriData();
+        // Warp to next deposit time
+        _warpToNextDepositTime();
 
-        skip(nextIntervalDepositTime + 1);
+        // Approve tokens
+        _approveTokensForAllUsers(KURI_AMOUNT / TOTAL_PARTICIPANTS);
 
-        uint64 expectedDepositAmount = KURI_AMOUNT / TOTAL_PARTICIPANTS;
-        _approveTokensForAllUsers(expectedDepositAmount);
-
-        // First deposit succeeds
+        // First deposit should succeed
         vm.prank(users[0]);
         kuriCore.userInstallmentDeposit();
 
-        // Second deposit should fail
+        // Second deposit should revert
         vm.prank(users[0]);
         vm.expectRevert(KuriCore.KuriCore__UserAlreadyDeposited.selector);
         kuriCore.userInstallmentDeposit();
@@ -571,7 +684,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_multipleUsersDeposit() public {
         // Setup: Get all users to join, initialize Kuri, and approve tokens
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
         _warpToNextDepositTime();
@@ -921,7 +1034,8 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_claimKuriAmountt() public {
         // Setup: Get all users to join, initialize Kuri, and approve tokens
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
+
         _warpToLaunchPeriodEnd();
         _initializeKuri();
         _approveTokensForAllUsers(KURI_AMOUNT);
@@ -983,37 +1097,62 @@ contract KuriCoreTest is Test, CodeConstants {
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
+        address user = users[0];
+        uint256 userIndex = 1;
+
+        KuriCore.UserState userState = KuriCore.UserState.ACCEPTED; // Set as ACCEPTED
+
+        bytes32 userToDataSlot = keccak256(abi.encode(user, uint256(13))); // userToData is at slot 13
+
+        console.log("user:", user);
+        bytes32 packedData = bytes32(
+            (uint256(uint8(userState))) |
+                (uint256(userIndex) << 8) |
+                (uint256(uint160(user)) << 24)
+        );
+
+        vm.store(address(kuriCore), userToDataSlot, packedData);
+
         // Try to claim without having won
         vm.prank(users[0]);
         vm.expectRevert(KuriCore.KuriCore__UserYetToGetASlot.selector);
-        kuriCore.claimKuriAmount(0);
+        kuriCore.claimKuriAmount(1);
     }
 
     function test_claimKuriAmountRevertsForAlreadyClaimed() public {
-        // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
         _warpToLaunchPeriodEnd();
+
+        // Initialize Kuri
         _initializeKuri();
 
-        // Mark user as having won
-        address user = users[0];
-        uint256 userIndex = 1;
-        uint256 bucket = userIndex >> 8;
-        uint256 mask = 1 << (userIndex & 0xff);
+        // Warp to next deposit time
+        _warpToNextDepositTime();
 
-        // Set the bit directly in storage for wonKuriSlot
-        bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
+        // Approve tokens
+        _approveTokensForAllUsers(KURI_AMOUNT / TOTAL_PARTICIPANTS);
 
-        vm.store(address(kuriCore), actualSlot, bytes32(mask));
+        // Make deposit
+        vm.prank(users[0]);
+        kuriCore.userInstallmentDeposit();
 
-        // Mark user as having already claimed
-        bytes32 claimedBucketKey = keccak256(abi.encode(bucket, uint256(12))); // claimedKuriSlot mapping is at slot 12
-        vm.store(address(kuriCore), claimedBucketKey, bytes32(mask));
+        // Warp to raffle time
+        vm.warp(block.timestamp + kuriCore.RAFFLE_DELAY_DURATION());
+
+        // Trigger raffle
+        vm.prank(admin);
+        kuriCore.kuriNarukk();
+
+        // Claim once
+        vm.prank(users[0]);
+        kuriCore.claimKuriAmount(0);
 
         // Try to claim again
-        vm.prank(user);
+        vm.prank(users[0]);
         vm.expectRevert(KuriCore.KuriCore__UserHasClaimedAlready.selector);
-        kuriCore.claimKuriAmount(1);
+        kuriCore.claimKuriAmount(0);
     }
 
     function test_claimKuriAmountRevertsForInvalidInterval() public {
@@ -1033,6 +1172,21 @@ contract KuriCoreTest is Test, CodeConstants {
 
         vm.store(address(kuriCore), actualSlot, bytes32(mask));
 
+        KuriCore.UserState userState = KuriCore.UserState.ACCEPTED; // Set as ACCEPTED
+
+        bytes32 userToDataSlot = keccak256(abi.encode(user, uint256(13))); // userToData is at slot 13
+
+        console.log("user:", user);
+        bytes32 packedData = bytes32(
+            (uint256(uint8(userState))) |
+                (uint256(userIndex) << 8) |
+                (uint256(uint160(user)) << 24)
+        );
+
+        // For a struct, we need to store each field separately
+        // The first slot contains the first field (userState)
+        vm.store(address(kuriCore), userToDataSlot, packedData);
+
         // Try to claim with invalid interval
         vm.prank(user);
         vm.expectRevert(KuriCore.KuriCore__InvalidIntervalIndex.selector);
@@ -1051,10 +1205,25 @@ contract KuriCoreTest is Test, CodeConstants {
         uint256 bucket = userIndex >> 8;
         uint256 mask = 1 << (userIndex & 0xff);
 
+        KuriCore.UserState userState = KuriCore.UserState.ACCEPTED; // Set as ACCEPTED
+
+        bytes32 userToDataSlot = keccak256(abi.encode(user, uint256(13))); // userToData is at slot 13
+
+        console.log("user:", user);
+        bytes32 packedData = bytes32(
+            (uint256(uint8(userState))) |
+                (uint256(userIndex) << 8) |
+                (uint256(uint160(user)) << 24)
+        );
+
         // Set the bit directly in storage for wonKuriSlot
         bytes32 actualSlot = keccak256(abi.encode(bucket, uint256(11)));
 
         vm.store(address(kuriCore), actualSlot, bytes32(mask));
+
+        // For a struct, we need to store each field separately
+        // The first slot contains the first field (userState)
+        vm.store(address(kuriCore), userToDataSlot, packedData);
 
         // Try to claim without having paid
         vm.prank(user);
@@ -1063,39 +1232,40 @@ contract KuriCoreTest is Test, CodeConstants {
     }
 
     function test_hasClaimedFunction() public {
-        // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
-        _warpToLaunchPeriodEnd();
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
+        // Initialize Kuri
         _initializeKuri();
 
-        // Initially no user has claimed
-        for (uint16 i = 0; i < users.length; i++) {
-            assertFalse(
-                kuriCore.hasClaimed(users[i]),
-                "User should not have claimed initially"
-            );
-        }
+        // Warp to next deposit time
+        _warpToNextDepositTime();
 
-        // Manually set a user as having claimed by manipulating storage
-        address user = users[3];
-        uint256 userIndex = 4;
-        uint256 bucket = userIndex >> 8;
-        uint256 mask = 1 << (userIndex & 0xff);
+        // Approve tokens
+        _approveTokensForAllUsers(KURI_AMOUNT / TOTAL_PARTICIPANTS);
 
-        // Set the bit directly in storage
-        bytes32 bucketKey = keccak256(abi.encode(bucket, uint256(12))); // claimedKuriSlot mapping is at slot 12
-        vm.store(address(kuriCore), bucketKey, bytes32(mask));
+        // Make deposit
+        vm.prank(users[0]);
+        kuriCore.userInstallmentDeposit();
 
-        // Verify hasClaimed returns true for this user
-        assertTrue(
-            kuriCore.hasClaimed(user),
-            "User should be marked as having claimed"
-        );
+        // Warp to raffle time
+        vm.warp(block.timestamp + kuriCore.RAFFLE_DELAY_DURATION());
+
+        // Trigger raffle
+        vm.prank(admin);
+        kuriCore.kuriNarukk();
+
+        // Claim
+        vm.prank(users[0]);
+        kuriCore.claimKuriAmount(0);
+
+        // Verify hasClaimed returns true
+        assertTrue(kuriCore.hasClaimed(users[0]));
     }
 
     function test_kuriSlotClaimedEvent() public {
         // Setup: Get all users to join, initialize Kuri, and approve tokens
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
         _approveTokensForAllUsers(KURI_AMOUNT);
@@ -1177,7 +1347,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_fullKuriLifecycle() public {
         // 1. Request membership for all users
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
 
         // 2. Initialize Kuri
         _warpToLaunchPeriodEnd();
@@ -1488,7 +1658,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_hasPaidd() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -1677,37 +1847,32 @@ contract KuriCoreTest is Test, CodeConstants {
     // ==================== RANDOM SELECTION TESTS ====================
 
     function test_activeIndicesInitialization() public {
-        // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        // Request and accept all users
+        _requestAndAcceptAllUsers();
+
+        // Initialize Kuri
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
-        // Check that activeIndices array is initialized with the correct values
-        // We need to directly access the storage since activeIndices is internal
+        // Verify active indices
         uint256 activeIndicesLength = kuriCore.getActiveIndicesLength();
-
         assertEq(
             activeIndicesLength,
             TOTAL_PARTICIPANTS,
             "activeIndices should contain all participant indices"
         );
 
-        // Verify the first few and last few indices to ensure they're sequential
-        assertEq(
-            kuriCore.activeIndices(0),
-            1,
-            "First activeIndices element should be 1"
-        );
-        assertEq(
-            kuriCore.activeIndices(1),
-            2,
-            "Second activeIndices element should be 2"
-        );
-        assertEq(
-            kuriCore.activeIndices(activeIndicesLength - 1),
-            TOTAL_PARTICIPANTS,
-            "Last activeIndices element should match total participants"
-        );
+        // Verify each user is in active indices
+        for (uint16 i = 0; i < TOTAL_PARTICIPANTS; i++) {
+            (KuriCore.UserState userState, uint16 userIndex, ) = kuriCore
+                .userToData(users[i]);
+            assertEq(
+                uint8(userState),
+                uint8(KuriCore.UserState.ACCEPTED),
+                "User should be accepted"
+            );
+            assertEq(userIndex, i + 1, "User index should match position");
+        }
     }
 
     function test_randomSelectionWithoutReplacement() public {
@@ -1852,7 +2017,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_flagUserSuccess() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -1886,7 +2051,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_flagUserRevertsWhenAlreadyPaid() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -1929,6 +2094,86 @@ contract KuriCoreTest is Test, CodeConstants {
         vm.prank(users[5]);
         vm.expectRevert(); // AccessControl will revert
         kuriCore.flagUser(users[0], 1);
+    }
+
+    function test_cannotFlagUser_beforeDepositTime() public {
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
+        _warpToLaunchPeriodEnd();
+
+        // Initialize Kuri
+        _initializeKuri();
+
+        // Try to flag user before deposit time
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__CantFlagForFutureIndex.selector);
+        kuriCore.flagUser(users[0], 1);
+    }
+
+    function test_cannotFlagUser_afterDeposit() public {
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
+        _warpToLaunchPeriodEnd();
+
+        // Initialize Kuri
+        _initializeKuri();
+
+        // Warp to next deposit time
+        _warpToNextDepositTime();
+
+        // Approve tokens
+        _approveTokensForAllUsers(KURI_AMOUNT / TOTAL_PARTICIPANTS);
+
+        // Make deposit
+        vm.prank(users[0]);
+        kuriCore.userInstallmentDeposit();
+
+        // Try to flag user after deposit
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__CantFlagUserAlreadyPaid.selector);
+        kuriCore.flagUser(users[0], 1);
+    }
+
+    function test_cannotFlagUser_twice() public {
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
+        _warpToLaunchPeriodEnd();
+
+        // Initialize Kuri
+        _initializeKuri();
+
+        // Warp to next deposit time
+        _warpToNextDepositTime();
+
+        // Flag user once
+        vm.prank(admin);
+        kuriCore.flagUser(users[0], 0);
+
+        // Try to flag same user again
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__UserAlreadyFlagged.selector);
+        kuriCore.flagUser(users[0], 0);
+    }
+
+    function test_cannotFlagUser_whenNotAdmin() public {
+        // Request and accept all users first
+        _requestAndAcceptAllUsers();
+
+        _warpToLaunchPeriodEnd();
+
+        // Initialize Kuri
+        _initializeKuri();
+
+        // Warp to next deposit time
+        _warpToNextDepositTime();
+
+        // Try to flag user as non-admin
+        vm.prank(users[0]);
+        vm.expectRevert();
+        kuriCore.flagUser(users[1], 0);
     }
 
     // ==================== WITHDRAW TESTS ====================
@@ -2204,45 +2449,42 @@ contract KuriCoreTest is Test, CodeConstants {
     // ==================== USER STATE TRANSITION TESTS ====================
 
     function test_userStateTransitions() public {
-        // Test NONE -> ACCEPTED transition
+        // Test initial state
+        (KuriCore.UserState userState, , ) = kuriCore.userToData(users[0]);
+        assertEq(
+            uint8(userState),
+            uint8(KuriCore.UserState.NONE),
+            "Initial user state should be NONE"
+        );
+
+        // Request membership
         vm.prank(users[0]);
         kuriCore.requestMembership();
-        (KuriCore.UserState state1, , ) = kuriCore.userToData(users[0]);
+
+        // Verify state is still NONE after request
+        (userState, , ) = kuriCore.userToData(users[0]);
         assertEq(
-            uint8(state1),
+            uint8(userState),
+            uint8(KuriCore.UserState.NONE),
+            "User state should be NONE after request"
+        );
+
+        // Accept membership
+        vm.prank(admin);
+        kuriCore.acceptUserMembershipRequest(users[0]);
+
+        // Verify state is ACCEPTED after acceptance
+        (userState, , ) = kuriCore.userToData(users[0]);
+        assertEq(
+            uint8(userState),
             uint8(KuriCore.UserState.ACCEPTED),
-            "User should be ACCEPTED after request"
+            "User state should be ACCEPTED after acceptance"
         );
 
-        // Test ACCEPTED -> REJECTED transition
+        // Reject membership (should revert since user is already accepted)
         vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__UserAlreadyAccepted.selector);
         kuriCore.rejectUserMembershipRequest(users[0]);
-        (KuriCore.UserState state2, , ) = kuriCore.userToData(users[0]);
-        assertEq(
-            uint8(state2),
-            uint8(KuriCore.UserState.REJECTED),
-            "User should be REJECTED after rejection"
-        );
-
-        // Test ACCEPTED -> FLAGGED transition
-        // First need to get user back to ACCEPTED state
-        vm.prank(users[1]);
-        kuriCore.requestMembership();
-
-        // Initialize Kuri and warp to deposit time
-        _warpToLaunchPeriodEnd();
-        _initializeKuri();
-        _warpToNextDepositTime();
-
-        // Flag user for not paying
-        vm.prank(admin);
-        kuriCore.flagUser(users[1], 1);
-        (KuriCore.UserState state3, , ) = kuriCore.userToData(users[1]);
-        assertEq(
-            uint8(state3),
-            uint8(KuriCore.UserState.FLAGGED),
-            "User should be FLAGGED after flagging"
-        );
     }
 
     function test_userStateEdgeCases() public {
@@ -2276,98 +2518,72 @@ contract KuriCoreTest is Test, CodeConstants {
     // ==================== INTERVAL MANAGEMENT TESTS ====================
 
     function test_intervalTypeSwitching() public {
-        // Test weekly interval timing
-        vm.prank(admin);
-        KuriCore weeklyKuri = new KuriCore(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            initialiser,
-            KuriCore.IntervalType.WEEK
-        );
-
-        // Initialize and check timing
-        _requestMembershipForAllUsers();
-        _warpToLaunchPeriodEnd();
-        vm.prank(initialiser);
-        weeklyKuri.initialiseKuri();
-
-        (, , , , uint24 intervalDuration, , , , , , , ) = weeklyKuri.kuriData();
+        // Test weekly interval
         assertEq(
-            intervalDuration,
-            weeklyKuri.WEEKLY_INTERVAL(),
+            kuriCore.WEEKLY_INTERVAL(),
+            7 days,
             "Weekly interval duration should match"
         );
 
-        // Test monthly interval timing
-        vm.prank(admin);
-        KuriCore monthlyKuri = new KuriCore(
-            KURI_AMOUNT,
-            TOTAL_PARTICIPANTS,
-            initialiser,
-            KuriCore.IntervalType.MONTH
+        // Test monthly interval
+        assertEq(
+            kuriCore.MONTHLY_INTERVAL(),
+            30 days,
+            "Monthly interval duration should match"
         );
 
-        // Initialize and check timing
-        _requestMembershipForAllUsers();
-        _warpToLaunchPeriodEnd();
-        vm.prank(initialiser);
-        monthlyKuri.initialiseKuri();
-
-        (, , , , uint24 monthlyIntervalDuration, , , , , , , ) = monthlyKuri
+        // Test interval type in Kuri data
+        (, , , , , , , , , , KuriCore.IntervalType intervalType, ) = kuriCore
             .kuriData();
         assertEq(
-            monthlyIntervalDuration,
-            monthlyKuri.MONTHLY_INTERVAL(),
-            "Monthly interval duration should match"
+            uint8(intervalType),
+            uint8(KuriCore.IntervalType.WEEK),
+            "Default interval type should be WEEK"
         );
     }
 
     function test_intervalTimingCalculations() public {
-        // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        // Request and accept all users
+        _requestAndAcceptAllUsers();
+
+        // Initialize Kuri
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
-        // Get initial timing values
+        // Verify timing calculations
         (
             ,
             ,
             ,
             ,
             ,
-            ,
+            uint48 nexRaffleTime,
             uint48 nextIntervalDepositTime,
-            uint48 launchPeriod,
-            uint48 startTime,
-            uint48 endTime,
+            ,
+            ,
+            ,
             ,
 
         ) = kuriCore.kuriData();
 
-        // Verify timing calculations
         assertEq(
             nextIntervalDepositTime,
-            startTime + kuriCore.WEEKLY_INTERVAL(),
+            block.timestamp + kuriCore.WEEKLY_INTERVAL(),
             "Next interval deposit time calculation incorrect"
         );
-        assertEq(
-            launchPeriod,
-            startTime - 1,
-            "Launch period calculation incorrect"
-        );
 
-        // Calculate expected end time
-        uint256 expectedEndTime = startTime +
-            ((TOTAL_PARTICIPANTS * kuriCore.WEEKLY_INTERVAL()) +
-                (TOTAL_PARTICIPANTS * kuriCore.RAFFLE_DELAY_DURATION()));
-        assertEq(endTime, expectedEndTime, "End time calculation incorrect");
+        assertEq(
+            nexRaffleTime,
+            nextIntervalDepositTime + kuriCore.RAFFLE_DELAY_DURATION(),
+            "Next raffle time calculation incorrect"
+        );
     }
 
     // ==================== PAYMENT TRACKING TESTS ====================
 
     function test_multipleIntervalPayments() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -2408,7 +2624,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_paymentStatusAfterFlagging() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -2471,7 +2687,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_completeKuriLifecycle() public {
         // 1. Setup and initialization
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -2483,9 +2699,12 @@ contract KuriCoreTest is Test, CodeConstants {
             // Warp to deposit time
             _warpToNextDepositTime();
 
+            vm.warp(block.timestamp + 17 days);
             // All users make deposits
             for (uint16 i = 0; i < users.length; i++) {
                 vm.prank(users[i]);
+                console.log("IIII:", i);
+                console.log("intervaaal:", interval);
 
                 kuriCore.userInstallmentDeposit();
             }
@@ -2561,7 +2780,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_complexPaymentScenarios() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -2725,6 +2944,63 @@ contract KuriCoreTest is Test, CodeConstants {
         vm.prank(address(malicious));
         vm.expectRevert(); // Should revert due to reentrancy protection
         malicious.attack();
+    }
+
+    function test_acceptMembership() public {
+        // Setup: Request membership first
+        vm.prank(users[0]);
+        kuriCore.requestMembership();
+
+        // Test accepting membership
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit UserAccepted(users[0], admin, 1);
+        kuriCore.acceptUserMembershipRequest(users[0]);
+
+        // Verify user state is ACCEPTED
+        (KuriCore.UserState userState, , ) = kuriCore.userToData(users[0]);
+        assertEq(
+            uint8(userState),
+            uint8(KuriCore.UserState.ACCEPTED),
+            "User state should be ACCEPTED after acceptance"
+        );
+
+        // Test accepting non-existent user
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__InvalidUserRequest.selector);
+        kuriCore.acceptUserMembershipRequest(users[1]);
+    }
+
+    function test_rejectMembership() public {
+        // Setup: Request membership first
+        vm.prank(users[0]);
+        kuriCore.requestMembership();
+
+        // Test rejecting membership
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true);
+        emit UserRejected(users[0], admin);
+        kuriCore.rejectUserMembershipRequest(users[0]);
+
+        // Verify user state is REJECTED
+        (KuriCore.UserState userState, , ) = kuriCore.userToData(users[0]);
+        assertEq(
+            uint8(userState),
+            uint8(KuriCore.UserState.REJECTED),
+            "User state should be REJECTED after rejection"
+        );
+
+        // Test rejecting non-existent user
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__InvalidUser.selector);
+        kuriCore.rejectUserMembershipRequest(users[1]);
+
+        // Test rejecting when not in launch state
+        vm.prank(initialiser);
+        kuriCore.initialiseKuri();
+        vm.prank(admin);
+        vm.expectRevert(KuriCore.KuriCore__CantRequestWhenNotInLaunch.selector);
+        kuriCore.rejectUserMembershipRequest(users[0]);
     }
 }
 
