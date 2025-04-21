@@ -33,7 +33,7 @@
       "type": "t_contract(IVRFCoordinatorV2Plus)380"
     },
     {
-      "astId": 1043,
+      "astId": 1061,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "s_subscriptionId",
       "offset": 0,
@@ -41,7 +41,7 @@
       "type": "t_uint256"
     },
     {
-      "astId": 1047,
+      "astId": 1065,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "s_keyHash",
       "offset": 0,
@@ -49,7 +49,7 @@
       "type": "t_bytes32"
     },
     {
-      "astId": 1051,
+      "astId": 1069,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "vrfCoordinator",
       "offset": 0,
@@ -57,39 +57,39 @@
       "type": "t_address"
     },
     {
-      "astId": 1055,
+      "astId": 1073,
       "contract": "src/KuriCore.sol:KuriCore",
-      "label": "callbackGasLimit",
+      "label": "s_callbackGasLimit",
       "offset": 20,
       "slot": "6",
       "type": "t_uint32"
     },
     {
-      "astId": 1059,
+      "astId": 1077,
       "contract": "src/KuriCore.sol:KuriCore",
-      "label": "requestConfirmations",
+      "label": "s_requestConfirmations",
       "offset": 24,
       "slot": "6",
       "type": "t_uint16"
     },
     {
-      "astId": 1063,
+      "astId": 1081,
       "contract": "src/KuriCore.sol:KuriCore",
-      "label": "numWords",
+      "label": "s_numWords",
       "offset": 26,
       "slot": "6",
       "type": "t_uint32"
     },
     {
-      "astId": 1119,
+      "astId": 1138,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "kuriData",
       "offset": 0,
       "slot": "7",
-      "type": "t_struct(Kuri)1106_storage"
+      "type": "t_struct(Kuri)1125_storage"
     },
     {
-      "astId": 1126,
+      "astId": 1145,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "payments",
       "offset": 0,
@@ -97,7 +97,7 @@
       "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_uint256))"
     },
     {
-      "astId": 1131,
+      "astId": 1150,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "wonKuriSlot",
       "offset": 0,
@@ -105,7 +105,7 @@
       "type": "t_mapping(t_uint256,t_uint256)"
     },
     {
-      "astId": 1136,
+      "astId": 1155,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "claimedKuriSlot",
       "offset": 0,
@@ -113,15 +113,15 @@
       "type": "t_mapping(t_uint256,t_uint256)"
     },
     {
-      "astId": 1142,
+      "astId": 1161,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "userToData",
       "offset": 0,
       "slot": "13",
-      "type": "t_mapping(t_address,t_struct(UserData)1115_storage)"
+      "type": "t_mapping(t_address,t_struct(UserData)1134_storage)"
     },
     {
-      "astId": 1147,
+      "astId": 1166,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "userIdToAddress",
       "offset": 0,
@@ -129,12 +129,20 @@
       "type": "t_mapping(t_uint16,t_address)"
     },
     {
-      "astId": 1152,
+      "astId": 1171,
       "contract": "src/KuriCore.sol:KuriCore",
       "label": "intervalToWinnerIndex",
       "offset": 0,
       "slot": "15",
       "type": "t_mapping(t_uint16,t_uint16)"
+    },
+    {
+      "astId": 1175,
+      "contract": "src/KuriCore.sol:KuriCore",
+      "label": "activeIndices",
+      "offset": 0,
+      "slot": "16",
+      "type": "t_array(t_uint16)dyn_storage"
     }
   ],
   "types": {
@@ -142,6 +150,12 @@
       "encoding": "inplace",
       "label": "address",
       "numberOfBytes": "20"
+    },
+    "t_array(t_uint16)dyn_storage": {
+      "encoding": "dynamic_array",
+      "label": "uint16[]",
+      "numberOfBytes": "32",
+      "base": "t_uint16"
     },
     "t_bool": {
       "encoding": "inplace",
@@ -158,17 +172,17 @@
       "label": "contract IVRFCoordinatorV2Plus",
       "numberOfBytes": "20"
     },
-    "t_enum(IntervalType)1078": {
+    "t_enum(IntervalType)1097": {
       "encoding": "inplace",
       "label": "enum KuriCore.IntervalType",
       "numberOfBytes": "1"
     },
-    "t_enum(KuriState)1069": {
+    "t_enum(KuriState)1087": {
       "encoding": "inplace",
       "label": "enum KuriCore.KuriState",
       "numberOfBytes": "1"
     },
-    "t_enum(UserState)1074": {
+    "t_enum(UserState)1093": {
       "encoding": "inplace",
       "label": "enum KuriCore.UserState",
       "numberOfBytes": "1"
@@ -180,12 +194,12 @@
       "numberOfBytes": "32",
       "value": "t_bool"
     },
-    "t_mapping(t_address,t_struct(UserData)1115_storage)": {
+    "t_mapping(t_address,t_struct(UserData)1134_storage)": {
       "encoding": "mapping",
       "key": "t_address",
       "label": "mapping(address => struct KuriCore.UserData)",
       "numberOfBytes": "32",
-      "value": "t_struct(UserData)1115_storage"
+      "value": "t_struct(UserData)1134_storage"
     },
     "t_mapping(t_bytes32,t_struct(RoleData)547_storage)": {
       "encoding": "mapping",
@@ -222,13 +236,13 @@
       "numberOfBytes": "32",
       "value": "t_uint256"
     },
-    "t_struct(Kuri)1106_storage": {
+    "t_struct(Kuri)1125_storage": {
       "encoding": "inplace",
       "label": "struct KuriCore.Kuri",
       "numberOfBytes": "96",
       "members": [
         {
-          "astId": 1081,
+          "astId": 1100,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "creator",
           "offset": 0,
@@ -236,7 +250,7 @@
           "type": "t_address"
         },
         {
-          "astId": 1083,
+          "astId": 1102,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "kuriAmount",
           "offset": 20,
@@ -244,7 +258,7 @@
           "type": "t_uint64"
         },
         {
-          "astId": 1085,
+          "astId": 1104,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "totalParticipantsCount",
           "offset": 28,
@@ -252,7 +266,7 @@
           "type": "t_uint16"
         },
         {
-          "astId": 1087,
+          "astId": 1106,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "totalActiveParticipantsCount",
           "offset": 30,
@@ -260,7 +274,7 @@
           "type": "t_uint16"
         },
         {
-          "astId": 1089,
+          "astId": 1108,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "intervalDuration",
           "offset": 0,
@@ -268,7 +282,7 @@
           "type": "t_uint24"
         },
         {
-          "astId": 1091,
+          "astId": 1110,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "nexRaffleTime",
           "offset": 3,
@@ -276,7 +290,7 @@
           "type": "t_uint48"
         },
         {
-          "astId": 1093,
+          "astId": 1112,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "nextIntervalDepositTime",
           "offset": 9,
@@ -284,7 +298,7 @@
           "type": "t_uint48"
         },
         {
-          "astId": 1095,
+          "astId": 1114,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "launchPeriod",
           "offset": 15,
@@ -292,7 +306,7 @@
           "type": "t_uint48"
         },
         {
-          "astId": 1097,
+          "astId": 1116,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "startTime",
           "offset": 21,
@@ -300,7 +314,7 @@
           "type": "t_uint48"
         },
         {
-          "astId": 1099,
+          "astId": 1118,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "endTime",
           "offset": 0,
@@ -308,20 +322,20 @@
           "type": "t_uint48"
         },
         {
-          "astId": 1102,
+          "astId": 1121,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "intervalType",
           "offset": 6,
           "slot": "2",
-          "type": "t_enum(IntervalType)1078"
+          "type": "t_enum(IntervalType)1097"
         },
         {
-          "astId": 1105,
+          "astId": 1124,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "state",
           "offset": 7,
           "slot": "2",
-          "type": "t_enum(KuriState)1069"
+          "type": "t_enum(KuriState)1087"
         }
       ]
     },
@@ -348,21 +362,21 @@
         }
       ]
     },
-    "t_struct(UserData)1115_storage": {
+    "t_struct(UserData)1134_storage": {
       "encoding": "inplace",
       "label": "struct KuriCore.UserData",
       "numberOfBytes": "32",
       "members": [
         {
-          "astId": 1110,
+          "astId": 1129,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "userState",
           "offset": 0,
           "slot": "0",
-          "type": "t_enum(UserState)1074"
+          "type": "t_enum(UserState)1093"
         },
         {
-          "astId": 1112,
+          "astId": 1131,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "userIndex",
           "offset": 1,
@@ -370,7 +384,7 @@
           "type": "t_uint16"
         },
         {
-          "astId": 1114,
+          "astId": 1133,
           "contract": "src/KuriCore.sol:KuriCore",
           "label": "userAddress",
           "offset": 3,

@@ -18,10 +18,7 @@ contract KuriCoreFactory {
      * @param timestamp Block timestamp when the market was deployed.
      */
     event KuriMarketDeployed(
-        address indexed caller,
-        address indexed marketAddress,
-        uint8 intervalType,
-        uint256 timestamp
+        address indexed caller, address indexed marketAddress, uint8 intervalType, uint256 timestamp
     );
 
     /**
@@ -32,36 +29,23 @@ contract KuriCoreFactory {
      * @param intervalType Numeric representation of the interval type (mapped to enum).
      * @return Address of the newly deployed KuriCore contract.
      */
-    function initialiseKuriMarket(
-        uint64 kuriAmount,
-        uint16 kuriParticipantCount,
-        uint8 intervalType
-    ) external returns (address) {
+    function initialiseKuriMarket(uint64 kuriAmount, uint16 kuriParticipantCount, uint8 intervalType)
+        external
+        returns (address)
+    {
         // Revert if kuriAmount or participant count is zero
         if (kuriAmount == 0 || kuriParticipantCount == 0) {
             revert KCF__InvalidInputs();
         }
 
         // Cast the uint8 intervalType into the KuriCore enum
-        KuriCore.IntervalType _intervalType = KuriCore.IntervalType(
-            intervalType
-        );
+        KuriCore.IntervalType _intervalType = KuriCore.IntervalType(intervalType);
 
         // Deploy a new instance of KuriCore using the provided parameters
-        KuriCore kuriCore = new KuriCore(
-            kuriAmount,
-            kuriParticipantCount,
-            msg.sender,
-            _intervalType
-        );
+        KuriCore kuriCore = new KuriCore(kuriAmount, kuriParticipantCount, msg.sender, _intervalType);
 
         // Emit event with deployment metadata
-        emit KuriMarketDeployed(
-            msg.sender,
-            address(kuriCore),
-            intervalType,
-            block.timestamp
-        );
+        emit KuriMarketDeployed(msg.sender, address(kuriCore), intervalType, block.timestamp);
 
         // Return address of the deployed contract
         return address(kuriCore);

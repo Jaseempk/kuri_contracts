@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {VRFConsumerBaseV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {console} from "forge-std/console.sol";
 
 /**
  * @title KuriCore
@@ -82,6 +83,15 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         ACTIVE,
         COMPLETED
     }
+    /**
+     * @notice Enum representing the interval type for the Kuri
+     * @dev WEEK: Weekly payment intervals
+     * @dev MONTH: Monthly payment intervals
+     */
+    enum IntervalType {
+        WEEK,
+        MONTH
+    }
 
     /**
      * @notice Enum representing the possible states of a user
@@ -94,16 +104,6 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         ACCEPTED,
         REJECTED,
         FLAGGED
-    }
-
-    /**
-     * @notice Enum representing the interval type for the Kuri
-     * @dev WEEK: Weekly payment intervals
-     * @dev MONTH: Monthly payment intervals
-     */
-    enum IntervalType {
-        WEEK,
-        MONTH
     }
 
     /**
@@ -233,14 +233,9 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /**
      * @notice Emitted when a new membership request is submitted
      * @param user Address of the user requesting membership
-     * @param userIndex Index assigned to the user in the system
      * @param timestamp Block timestamp when request was made
      */
-    event MembershipRequested(
-        address user,
-        uint16 userIndex,
-        uint256 timestamp
-    );
+    event MembershipRequested(address user, uint256 timestamp);
 
     /**
      * @notice Emitted when a user is flagged for suspicious activity
@@ -254,7 +249,11 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @param user The address of the user that was accepted
      * @param caller The address of the account that accepted the user
      */
-    event UserAccepted(address user, address caller);
+    event UserAccepted(
+        address user,
+        address caller,
+        uint16 _totalActiveParticipantsCount
+    );
 
     /**
      * @notice Emitted when a user is rejected from the system
@@ -338,6 +337,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         kuriData.intervalDuration = kuriData.intervalType == IntervalType.WEEK
             ? uint24(WEEKLY_INTERVAL)
             : uint24(MONTHLY_INTERVAL);
+        console.log("intervalDUration:", kuriData.intervalDuration);
 
         // Calculate the next interval deposit time
         kuriData.nextIntervalDepositTime = uint48(
@@ -375,39 +375,24 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function requestMembership() external {
         // check if the user is already a member
         if (userToData[msg.sender].userState == UserState.ACCEPTED) return;
-        if (userToData[msg.sender].userState == UserState.REJECTED)
+        console.log("looi");
+        if (userToData[msg.sender].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
+        }
 
-        if (
-            userIdToAddress[kuriData.totalActiveParticipantsCount] == msg.sender
-        ) revert KuriCore__UserAlreadyRequested();
+        if (userToData[msg.sender].userAddress == msg.sender) {
+            revert KuriCore__UserAlreadyRequested();
+        }
 
-        if (kuriData.state != KuriState.INLAUNCH)
+        if (kuriData.state != KuriState.INLAUNCH) {
             revert KuriCore__CantRequestWhenNotInLaunch();
+        }
 
-        if (kuriData.launchPeriod < block.timestamp)
+        if (kuriData.launchPeriod < block.timestamp) {
             revert KuriCore__AlreadyPastLaunchPeriod();
+        }
 
-        if (
-            kuriData.totalParticipantsCount ==
-            kuriData.totalActiveParticipantsCount
-        ) revert KuriCore__KuriFilledAlready();
-
-        emit MembershipRequested(
-            msg.sender,
-            kuriData.totalActiveParticipantsCount + 1,
-            block.timestamp
-        );
-
-        userIdToAddress[kuriData.totalActiveParticipantsCount + 1] = msg.sender;
-
-        // add the user to the accepted list
-        userToData[msg.sender] = UserData(
-            UserState.ACCEPTED,
-            kuriData.totalActiveParticipantsCount + 1,
-            msg.sender
-        );
-        kuriData.totalActiveParticipantsCount++;
+        emit MembershipRequested(msg.sender, block.timestamp);
     }
 
     /**
@@ -419,19 +404,42 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address _user
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_user == address(0)) revert KuriCore__InvalidAddress();
+        if (
+            kuriData.totalParticipantsCount ==
+            kuriData.totalActiveParticipantsCount
+        ) {
+            revert KuriCore__KuriFilledAlready();
+        }
         if (userToData[_user].userState == UserState.ACCEPTED) {
             revert KuriCore__UserAlreadyAccepted();
         }
         if (userToData[_user].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
         }
-        if (kuriData.state != KuriState.INLAUNCH)
+        if (kuriData.state != KuriState.INLAUNCH) {
             revert KuriCore__CantRequestWhenNotInLaunch();
+        }
 
-        if (kuriData.launchPeriod < block.timestamp)
+        if (kuriData.launchPeriod < block.timestamp) {
             revert KuriCore__AlreadyPastLaunchPeriod();
+        }
+        emit UserAccepted(
+            _user,
+            msg.sender,
+            kuriData.totalActiveParticipantsCount + 1
+        );
 
-        emit UserAccepted(_user, msg.sender);
+        kuriData.totalActiveParticipantsCount++;
+
+        userIdToAddress[kuriData.totalActiveParticipantsCount] = _user;
+
+        // add the user to the accepted list
+        userToData[_user] = UserData(
+            UserState.ACCEPTED,
+            kuriData.totalActiveParticipantsCount,
+            _user
+        );
+
         userToData[_user].userState = UserState.ACCEPTED;
     }
 
@@ -840,7 +848,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         // Calculate the bucket and mask for the bitmap
         uint256 bucket = userIndex >> 8; // Divide by 256 to get the bucket
-        uint256 mask = 1 << (userIndex & 0xff); // Get the bit position within the bucket
+        uint256 mask = 1 << (userIndex & 0xff); // Get the bit position within the bucket(& operation extracts the LS8B)
 
         // Set the bit for the user in the won bitmap
         wonKuriSlot[bucket] |= mask;
