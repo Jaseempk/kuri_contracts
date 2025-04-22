@@ -37,6 +37,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__CantFlagForFutureIndex();
     error KuriCore__CantFlagUserAlreadyPaid();
     error KuriCore__AlreadyPastLaunchPeriod();
+    error KuriCore__CantRejectWhenNotInLaunch();
+    error KuriCore__CantAcceptWhenNotInLaunch();
     error KuriCore__DepositIntervalNotReached();
     error KuriCore__CantRequestWhenNotInLaunch();
     error KuriCore__CantWithdrawWhenCycleIsActive();
@@ -422,7 +424,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             revert KuriCore__AlreadyRejected();
         }
         if (kuriData.state != KuriState.INLAUNCH) {
-            revert KuriCore__CantRequestWhenNotInLaunch();
+            revert KuriCore__CantAcceptWhenNotInLaunch();
         }
 
         if (kuriData.launchPeriod < block.timestamp) {
@@ -456,6 +458,9 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function rejectUserMembershipRequest(
         address _user
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (kuriData.state != KuriState.INLAUNCH) {
+            revert KuriCore__CantRejectWhenNotInLaunch();
+        }
         if (_user == address(0)) revert KuriCore__InvalidAddress();
         if (userToData[_user].userState == UserState.ACCEPTED) {
             revert KuriCore__UserAlreadyAccepted();
@@ -463,6 +468,10 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (userToData[_user].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
         }
+        if (userToData[_user].userAddress != _user) {
+            revert KuriCore__InvalidUserRequest();
+        }
+
         emit UserRejected(_user, msg.sender);
         userToData[_user].userState = UserState.REJECTED;
     }
@@ -630,7 +639,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (userToData[_user].userState == UserState.FLAGGED) {
             revert KuriCore__UserAlreadyFlagged();
         }
-
+        console.log("enthiss:", passedIntervalsCounter());
         if (passedIntervalsCounter() < _intervalIndex) {
             revert KuriCore__CantFlagForFutureIndex();
         }
@@ -748,6 +757,11 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address _user,
         uint256 _intervalIndex
     ) public view returns (bool) {
+        if (
+            _intervalIndex == 0 ||
+            _intervalIndex > kuriData.totalActiveParticipantsCount
+        ) revert KuriCore__InvalidIntervalIndex();
+
         // Get the user's index
         uint256 index = userToData[_user].userIndex;
         if (index == 0) revert KuriCore__InvalidUser();
