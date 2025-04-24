@@ -8,9 +8,9 @@ dataSources:
     name: KuriCoreFactory
     network: base-sepolia
     source:
-      address: "0x4D2155F8136bD8fEBa10ECfcdf82bD97cd78134e"
+      address: "0x9f8ED10E7C127a9d679d0d4EC44688d0A8f25d1D"
       abi: KuriCoreFactory
-      startBlock: 24342582
+      startBlock: 24851743
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -21,7 +21,7 @@ dataSources:
         - name: KuriCoreFactory
           file: ./abis/KuriCoreFactory.json
       eventHandlers:
-        - event: KuriMarketDeployed(address,address,uint8,uint256)
+        - event: KuriMarketDeployed(indexed address,indexed address,uint8,uint256)
           handler: handleKuriMarketDeployed
       file: ./src/kuri-core-factory.ts
 
@@ -40,13 +40,17 @@ templates:
         - KuriInitFailed
         - KuriInitialised
         - KuriSlotClaimed
+        - MembershipRequested
         - OwnershipTransferRequested
         - OwnershipTransferred
         - RaffleWinnerSelected
         - RoleAdminChanged
         - RoleGranted
         - RoleRevoked
+        - UserAccepted
         - UserDeposited
+        - UserFlagged
+        - UserRejected
       abis:
         - name: KuriCore
           file: ./abis/KuriCore.json
@@ -59,6 +63,8 @@ templates:
           handler: handleKuriInitialised
         - event: KuriSlotClaimed(address,uint64,uint64,uint16)
           handler: handleKuriSlotClaimed
+        - event: MembershipRequested(address,uint256)
+          handler: handleMembershipRequested
         - event: OwnershipTransferRequested(indexed address,indexed address)
           handler: handleOwnershipTransferRequested
         - event: OwnershipTransferred(indexed address,indexed address)
@@ -71,6 +77,12 @@ templates:
           handler: handleRoleGranted
         - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
           handler: handleRoleRevoked
+        - event: UserAccepted(address,address,uint16)
+          handler: handleUserAccepted
         - event: UserDeposited(address,uint256,uint256,uint64,uint48)
           handler: handleUserDeposited
+        - event: UserFlagged(address,uint16)
+          handler: handleUserFlagged
+        - event: UserRejected(address,address)
+          handler: handleUserRejected
       file: ./src/kuri-core.ts

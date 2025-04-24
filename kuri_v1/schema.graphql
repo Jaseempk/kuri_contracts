@@ -57,6 +57,15 @@ type KuriSlotClaimed @entity(immutable: true) {
   transactionHash: Bytes!
 }
 
+type MembershipRequested @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes! # address
+  timestamp: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
 type OwnershipTransferRequested @entity(immutable: true) {
   id: Bytes!
   from: Bytes! # address
@@ -117,6 +126,16 @@ type RoleRevoked @entity(immutable: true) {
   transactionHash: Bytes!
 }
 
+type UserAccepted @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes! # address
+  caller: Bytes! # address
+  _totalActiveParticipantsCount: Int! # uint16
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
 type UserDeposited @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
@@ -124,6 +143,24 @@ type UserDeposited @entity(immutable: true) {
   intervalIndex: BigInt! # uint256
   amountDeposited: BigInt! # uint64
   depositTimestamp: BigInt! # uint48
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type UserFlagged @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes! # address
+  intervalIndex: Int! # uint16
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type UserRejected @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes! # address
+  caller: Bytes! # address
   blockNumber: BigInt!
   blockTimestamp: BigInt!
   transactionHash: Bytes!

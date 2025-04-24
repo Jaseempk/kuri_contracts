@@ -3,26 +3,34 @@ import {
   KuriInitFailed as KuriInitFailedEvent,
   KuriInitialised as KuriInitialisedEvent,
   KuriSlotClaimed as KuriSlotClaimedEvent,
+  MembershipRequested as MembershipRequestedEvent,
   OwnershipTransferRequested as OwnershipTransferRequestedEvent,
   OwnershipTransferred as OwnershipTransferredEvent,
   RaffleWinnerSelected as RaffleWinnerSelectedEvent,
   RoleAdminChanged as RoleAdminChangedEvent,
   RoleGranted as RoleGrantedEvent,
   RoleRevoked as RoleRevokedEvent,
+  UserAccepted as UserAcceptedEvent,
   UserDeposited as UserDepositedEvent,
+  UserFlagged as UserFlaggedEvent,
+  UserRejected as UserRejectedEvent,
 } from "../generated/templates/KuriCore/KuriCore";
 import {
   CoordinatorSet,
   KuriInitFailed,
   KuriInitialised,
   KuriSlotClaimed,
+  MembershipRequested,
   OwnershipTransferRequested,
   OwnershipTransferred,
   RaffleWinnerSelected,
   RoleAdminChanged,
   RoleGranted,
   RoleRevoked,
+  UserAccepted,
   UserDeposited,
+  UserFlagged,
+  UserRejected,
 } from "../generated/schema";
 
 export function handleCoordinatorSet(event: CoordinatorSetEvent): void {
@@ -89,6 +97,22 @@ export function handleKuriSlotClaimed(event: KuriSlotClaimedEvent): void {
   entity.timestamp = event.params.timestamp;
   entity.kuriAmount = event.params.kuriAmount;
   entity.intervalIndex = event.params.intervalIndex;
+
+  entity.blockNumber = event.block.number;
+  entity.blockTimestamp = event.block.timestamp;
+  entity.transactionHash = event.transaction.hash;
+
+  entity.save();
+}
+
+export function handleMembershipRequested(
+  event: MembershipRequestedEvent
+): void {
+  let entity = new MembershipRequested(
+    event.transaction.hash.concatI32(event.logIndex.toI32())
+  );
+  entity.user = event.params.user;
+  entity.timestamp = event.params.timestamp;
 
   entity.blockNumber = event.block.number;
   entity.blockTimestamp = event.block.timestamp;
@@ -193,6 +217,22 @@ export function handleRoleRevoked(event: RoleRevokedEvent): void {
   entity.save();
 }
 
+export function handleUserAccepted(event: UserAcceptedEvent): void {
+  let entity = new UserAccepted(
+    event.transaction.hash.concatI32(event.logIndex.toI32())
+  );
+  entity.user = event.params.user;
+  entity.caller = event.params.caller;
+  entity._totalActiveParticipantsCount =
+    event.params._totalActiveParticipantsCount;
+
+  entity.blockNumber = event.block.number;
+  entity.blockTimestamp = event.block.timestamp;
+  entity.transactionHash = event.transaction.hash;
+
+  entity.save();
+}
+
 export function handleUserDeposited(event: UserDepositedEvent): void {
   let entity = new UserDeposited(
     event.transaction.hash.concatI32(event.logIndex.toI32())
@@ -202,6 +242,34 @@ export function handleUserDeposited(event: UserDepositedEvent): void {
   entity.intervalIndex = event.params.intervalIndex;
   entity.amountDeposited = event.params.amountDeposited;
   entity.depositTimestamp = event.params.depositTimestamp;
+
+  entity.blockNumber = event.block.number;
+  entity.blockTimestamp = event.block.timestamp;
+  entity.transactionHash = event.transaction.hash;
+
+  entity.save();
+}
+
+export function handleUserFlagged(event: UserFlaggedEvent): void {
+  let entity = new UserFlagged(
+    event.transaction.hash.concatI32(event.logIndex.toI32())
+  );
+  entity.user = event.params.user;
+  entity.intervalIndex = event.params.intervalIndex;
+
+  entity.blockNumber = event.block.number;
+  entity.blockTimestamp = event.block.timestamp;
+  entity.transactionHash = event.transaction.hash;
+
+  entity.save();
+}
+
+export function handleUserRejected(event: UserRejectedEvent): void {
+  let entity = new UserRejected(
+    event.transaction.hash.concatI32(event.logIndex.toI32())
+  );
+  entity.user = event.params.user;
+  entity.caller = event.params.caller;
 
   entity.blockNumber = event.block.number;
   entity.blockTimestamp = event.block.timestamp;

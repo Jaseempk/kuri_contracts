@@ -35,7 +35,28 @@
   { "inputs": [], "name": "KuriCore__CallerNotAccepted", "type": "error" },
   {
     "inputs": [],
+    "name": "KuriCore__CantAcceptWhenNotInLaunch",
+    "type": "error"
+  },
+  { "inputs": [], "name": "KuriCore__CantFlagForFutureIndex", "type": "error" },
+  {
+    "inputs": [],
+    "name": "KuriCore__CantFlagUserAlreadyPaid",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "KuriCore__CantRejectWhenNotInLaunch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "KuriCore__CantRequestWhenNotInLaunch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "KuriCore__CantWithdrawWhenCycleIsActive",
     "type": "error"
   },
   {
@@ -48,15 +69,19 @@
     "name": "KuriCore__InsufficientActiveParticipantCount",
     "type": "error"
   },
+  { "inputs": [], "name": "KuriCore__InvalidAddress", "type": "error" },
   { "inputs": [], "name": "KuriCore__InvalidIntervalIndex", "type": "error" },
   { "inputs": [], "name": "KuriCore__InvalidUser", "type": "error" },
+  { "inputs": [], "name": "KuriCore__InvalidUserRequest", "type": "error" },
   { "inputs": [], "name": "KuriCore__KuriFilledAlready", "type": "error" },
   { "inputs": [], "name": "KuriCore__LaunchPeriodNotOver", "type": "error" },
   { "inputs": [], "name": "KuriCore__NoActiveKuri", "type": "error" },
   { "inputs": [], "name": "KuriCore__NotInLaunchState", "type": "error" },
   { "inputs": [], "name": "KuriCore__RaffleDelayNotOver", "type": "error" },
+  { "inputs": [], "name": "KuriCore__UserAlreadyAccepted", "type": "error" },
   { "inputs": [], "name": "KuriCore__UserAlreadyDeposited", "type": "error" },
-  { "inputs": [], "name": "KuriCore__UserAlreadyExists", "type": "error" },
+  { "inputs": [], "name": "KuriCore__UserAlreadyFlagged", "type": "error" },
+  { "inputs": [], "name": "KuriCore__UserAlreadyRequested", "type": "error" },
   { "inputs": [], "name": "KuriCore__UserHasClaimedAlready", "type": "error" },
   { "inputs": [], "name": "KuriCore__UserYetToGetASlot", "type": "error" },
   { "inputs": [], "name": "KuriCore__UserYetToMakePayments", "type": "error" },
@@ -210,6 +235,25 @@
       }
     ],
     "name": "KuriSlotClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "MembershipRequested",
     "type": "event"
   },
   {
@@ -373,6 +417,31 @@
       },
       {
         "indexed": false,
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "_totalActiveParticipantsCount",
+        "type": "uint16"
+      }
+    ],
+    "name": "UserAccepted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
         "name": "userIndex",
         "type": "uint256"
@@ -397,6 +466,44 @@
       }
     ],
     "name": "UserDeposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "intervalIndex",
+        "type": "uint16"
+      }
+    ],
+    "name": "UserFlagged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "UserRejected",
     "type": "event"
   },
   {
@@ -456,6 +563,15 @@
     "type": "function"
   },
   {
+    "inputs": [
+      { "internalType": "address", "name": "_user", "type": "address" }
+    ],
+    "name": "acceptUserMembershipRequest",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "name": "activeIndices",
     "outputs": [{ "internalType": "uint16", "name": "", "type": "uint16" }],
@@ -463,15 +579,8 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "callbackGasLimit",
-    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
-      { "internalType": "uint16", "name": "intervalIndex", "type": "uint16" }
+      { "internalType": "uint16", "name": "_intervalIndex", "type": "uint16" }
     ],
     "name": "claimKuriAmount",
     "outputs": [],
@@ -481,6 +590,23 @@
   {
     "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "name": "claimedKuriSlot",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_user", "type": "address" },
+      { "internalType": "uint16", "name": "_intervalIndex", "type": "uint16" }
+    ],
+    "name": "flagUser",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getActiveIndicesLength",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "view",
     "type": "function"
@@ -506,7 +632,7 @@
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "user", "type": "address" }
+      { "internalType": "address", "name": "_user", "type": "address" }
     ],
     "name": "hasClaimed",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
@@ -515,8 +641,8 @@
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "user", "type": "address" },
-      { "internalType": "uint256", "name": "intervalIndex", "type": "uint256" }
+      { "internalType": "address", "name": "_user", "type": "address" },
+      { "internalType": "uint256", "name": "_intervalIndex", "type": "uint256" }
     ],
     "name": "hasPaid",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
@@ -535,7 +661,7 @@
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "user", "type": "address" }
+      { "internalType": "address", "name": "_user", "type": "address" }
     ],
     "name": "hasWon",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
@@ -604,16 +730,9 @@
     "inputs": [],
     "name": "kuriNarukk",
     "outputs": [
-      { "internalType": "uint256", "name": "requestId", "type": "uint256" }
+      { "internalType": "uint256", "name": "_requestId", "type": "uint256" }
     ],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "numWords",
-    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -662,6 +781,15 @@
   },
   {
     "inputs": [
+      { "internalType": "address", "name": "_user", "type": "address" }
+    ],
+    "name": "rejectUserMembershipRequest",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
       { "internalType": "bytes32", "name": "role", "type": "bytes32" },
       {
         "internalType": "address",
@@ -672,13 +800,6 @@
     "name": "renounceRole",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "requestConfirmations",
-    "outputs": [{ "internalType": "uint16", "name": "", "type": "uint16" }],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -709,8 +830,29 @@
   },
   {
     "inputs": [],
+    "name": "s_callbackGasLimit",
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "s_keyHash",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "s_numWords",
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "s_requestConfirmations",
+    "outputs": [{ "internalType": "uint16", "name": "", "type": "uint16" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -806,6 +948,13 @@
     "name": "vrfCoordinator",
     "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdraw",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
