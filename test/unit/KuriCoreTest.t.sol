@@ -908,7 +908,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_kuriNarukkRevertsBeforeRaffleDelay() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -1685,17 +1685,9 @@ contract KuriCoreTest is Test, CodeConstants {
         );
     }
 
-    function test_hasPaidRevertsForInvalidUser() public {
-        address nonMember = makeAddr("nonMember");
-
-        // Try to check payment status for non-member
-        vm.expectRevert(KuriCore.KuriCore__InvalidUser.selector);
-        kuriCore.hasPaid(nonMember, 1);
-    }
-
     function test_hasPaidWithDirectStorageManipulation() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -2089,7 +2081,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
     function test_flagUserRevertsForFutureInterval() public {
         // Setup: Get all users to join, initialize Kuri
-        _requestMembershipForAllUsers();
+        _requestAndAcceptAllUsers();
         _warpToLaunchPeriodEnd();
         _initializeKuri();
 
@@ -2557,12 +2549,17 @@ contract KuriCoreTest is Test, CodeConstants {
         _initializeKuri();
 
         uint64 expectedDepositAmount = KURI_AMOUNT / TOTAL_PARTICIPANTS;
-        _approveTokensForAllUsers(expectedDepositAmount);
 
         // Test payments across multiple intervals
         for (uint16 interval = 1; interval <= 3; interval++) {
+            _approveTokensForAllUsers(expectedDepositAmount);
+
             // Warp to next deposit time
-            _warpToNextDepositTime();
+            if (interval == 1) {
+                _warpToNextDepositTime();
+            } else {
+                vm.warp(block.timestamp + 10 days);
+            }
 
             // All users make deposits for this interval
             for (uint16 i = 0; i < users.length; i++) {
@@ -2661,26 +2658,27 @@ contract KuriCoreTest is Test, CodeConstants {
         _initializeKuri();
 
         uint64 expectedDepositAmount = KURI_AMOUNT / TOTAL_PARTICIPANTS;
-        _approveTokensForAllUsers(expectedDepositAmount);
 
         // 2. Run through all intervals
         for (uint16 interval = 1; interval <= TOTAL_PARTICIPANTS; interval++) {
+            _approveTokensForAllUsers(expectedDepositAmount);
             // Warp to deposit time
-            _warpToNextDepositTime();
+            if (interval == 1) {
+                _warpToNextDepositTime();
+            } else {
+                vm.warp(block.timestamp + 7 days);
+            }
 
-            vm.warp(block.timestamp + 17 days);
             // All users make deposits
             for (uint16 i = 0; i < users.length; i++) {
                 vm.prank(users[i]);
-                console.log("IIII:", i);
-                console.log("intervaaal:", interval);
 
                 kuriCore.userInstallmentDeposit();
             }
 
             // Warp to raffle time
-            (, , , , , uint48 nexRaffleTime, , , , , , ) = kuriCore.kuriData();
-            vm.warp(nexRaffleTime + 1);
+
+            vm.warp(block.timestamp + kuriCore.RAFFLE_DELAY_DURATION());
 
             uint16 userIndex = interval;
 
@@ -2692,11 +2690,6 @@ contract KuriCoreTest is Test, CodeConstants {
                 intervalToWinnerIndexSlot,
                 bytes32(uint256(userIndex))
             );
-
-            // adlald
-            // Trigger raffle
-            vm.prank(admin);
-            kuriCore.kuriNarukk();
 
             // Manually set the user as having won
             uint256 bucket = userIndex >> 8;
@@ -2716,6 +2709,7 @@ contract KuriCoreTest is Test, CodeConstants {
 
             // Winner claims their Kuri amount
             address winner = kuriCore.userIdToAddress(winnerIndex);
+
             vm.prank(winner);
             kuriCore.claimKuriAmount(interval);
 

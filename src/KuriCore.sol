@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {VRFConsumerBaseV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
-import {console} from "forge-std/console.sol";
 
 /**
  * @title KuriCore
@@ -493,7 +492,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (kuriData.nextIntervalDepositTime > block.timestamp) {
             revert KuriCore__DepositIntervalNotReached();
         }
-        console.log("interaval:index:", passedIntervalsCounter());
+
         // check if the user has already paid
         if (hasPaid(msg.sender, passedIntervalsCounter())) {
             revert KuriCore__UserAlreadyDeposited();
@@ -639,7 +638,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (userToData[_user].userState == UserState.FLAGGED) {
             revert KuriCore__UserAlreadyFlagged();
         }
-        console.log("enthiss:", passedIntervalsCounter());
+
         if (passedIntervalsCounter() < _intervalIndex) {
             revert KuriCore__CantFlagForFutureIndex();
         }
