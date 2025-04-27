@@ -87,7 +87,7 @@ contract HelperConfig is CodeConstants, Script {
             subscriptionId: 111354311979648395489096536317869612424008220436069067319236829392818402563961, // Update this with your subscription ID!
             gasLane: 0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71, // Base Sepolia gas lane
             automationUpdateInterval: 30, // 30 seconds
-            callbackGasLimit: 40000, // 500,000 gas
+            callbackGasLimit: 5000000, // 500,000 gas
             vrfCoordinatorV2_5: 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE, // Base Sepolia VRF Coordinator
             link: 0xE4aB69C077896252FAFBD49EFD26B5D171A32410, // Base Sepolia LINK token
             account: 0xF941d25cEB9A56f36B2E246eC13C125305544283,

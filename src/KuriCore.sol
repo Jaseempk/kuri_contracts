@@ -278,7 +278,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         address _initialiser,
         IntervalType _intervalType
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
-        kuriData.creator = msg.sender;
+        kuriData.creator = _initialiser;
         kuriData.kuriAmount = _kuriAmount;
         kuriData.totalParticipantsCount = _participantCount;
 

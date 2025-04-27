@@ -19,6 +19,7 @@ type CoordinatorSet @entity(immutable: true) {
 type KuriInitFailed @entity(immutable: true) {
   id: Bytes!
   creator: Bytes! # address
+  contractAddress: Bytes! # address
   kuriAmount: BigInt! # uint64
   totalParticipantsCount: Int! # uint16
   state: Int! # uint8
@@ -30,6 +31,7 @@ type KuriInitFailed @entity(immutable: true) {
 type KuriInitialised @entity(immutable: true) {
   id: Bytes!
   _kuriData_creator: Bytes! # address
+  contractAddress: Bytes! # address
   _kuriData_kuriAmount: BigInt! # uint64
   _kuriData_totalParticipantsCount: Int! # uint16
   _kuriData_totalActiveParticipantsCount: Int! # uint16
@@ -49,6 +51,7 @@ type KuriInitialised @entity(immutable: true) {
 type KuriSlotClaimed @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
+  contractAddress: Bytes! # address
   timestamp: BigInt! # uint64
   kuriAmount: BigInt! # uint64
   intervalIndex: Int! # uint16
@@ -60,6 +63,7 @@ type KuriSlotClaimed @entity(immutable: true) {
 type MembershipRequested @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
+  contractAddress: Bytes! # address
   timestamp: BigInt! # uint256
   blockNumber: BigInt!
   blockTimestamp: BigInt!
@@ -87,6 +91,7 @@ type OwnershipTransferred @entity(immutable: true) {
 type RaffleWinnerSelected @entity(immutable: true) {
   id: Bytes!
   intervalIndex: Int! # uint16
+  contractAddress: Bytes! # address
   winnerIndex: Int! # uint16
   winnerAddress: Bytes! # address
   winnerTimestamp: BigInt! # uint48
@@ -129,6 +134,7 @@ type RoleRevoked @entity(immutable: true) {
 type UserAccepted @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
+  contractAddress: Bytes! # address
   caller: Bytes! # address
   _totalActiveParticipantsCount: Int! # uint16
   blockNumber: BigInt!
@@ -139,6 +145,7 @@ type UserAccepted @entity(immutable: true) {
 type UserDeposited @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
+  contractAddress: Bytes! # address
   userIndex: BigInt! # uint256
   intervalIndex: BigInt! # uint256
   amountDeposited: BigInt! # uint64
@@ -151,6 +158,7 @@ type UserDeposited @entity(immutable: true) {
 type UserFlagged @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
+  contractAddress: Bytes! # address
   intervalIndex: Int! # uint16
   blockNumber: BigInt!
   blockTimestamp: BigInt!
@@ -160,6 +168,7 @@ type UserFlagged @entity(immutable: true) {
 type UserRejected @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
+  contractAddress: Bytes! # address
   caller: Bytes! # address
   blockNumber: BigInt!
   blockTimestamp: BigInt!
