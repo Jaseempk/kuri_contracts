@@ -52,7 +52,6 @@ export function handleKuriInitFailed(event: KuriInitFailedEvent): void {
   );
   entity.creator = event.params.creator;
   entity.kuriAmount = event.params.kuriAmount;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity.totalParticipantsCount = event.params.totalParticipantsCount;
   entity.state = event.params.state;
 
@@ -69,7 +68,6 @@ export function handleKuriInitialised(event: KuriInitialisedEvent): void {
   );
   entity._kuriData_creator = event.params._kuriData.creator;
   entity._kuriData_kuriAmount = event.params._kuriData.kuriAmount;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity._kuriData_totalParticipantsCount =
     event.params._kuriData.totalParticipantsCount;
   entity._kuriData_totalActiveParticipantsCount =
@@ -97,7 +95,6 @@ export function handleKuriSlotClaimed(event: KuriSlotClaimedEvent): void {
   );
   entity.user = event.params.user;
   entity.timestamp = event.params.timestamp;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity.kuriAmount = event.params.kuriAmount;
   entity.intervalIndex = event.params.intervalIndex;
 
@@ -115,7 +112,6 @@ export function handleMembershipRequested(
     event.transaction.hash.concatI32(event.logIndex.toI32())
   );
   entity.user = event.params.user;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity.timestamp = event.params.timestamp;
 
   entity.blockNumber = event.block.number;
@@ -165,7 +161,6 @@ export function handleRaffleWinnerSelected(
   );
   entity.intervalIndex = event.params.intervalIndex;
   entity.winnerIndex = event.params.winnerIndex;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity.winnerAddress = event.params.winnerAddress;
   entity.winnerTimestamp = event.params.winnerTimestamp;
   entity.requestId = event.params.requestId;
@@ -228,7 +223,6 @@ export function handleUserAccepted(event: UserAcceptedEvent): void {
   );
   entity.user = event.params.user;
   entity.caller = event.params.caller;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity._totalActiveParticipantsCount =
     event.params._totalActiveParticipantsCount;
 
@@ -245,7 +239,6 @@ export function handleUserDeposited(event: UserDepositedEvent): void {
   );
   entity.user = event.params.user;
   entity.userIndex = event.params.userIndex;
-  entity.contractAddress = event.address; // <-- This line saves the address
   entity.intervalIndex = event.params.intervalIndex;
   entity.amountDeposited = event.params.amountDeposited;
   entity.depositTimestamp = event.params.depositTimestamp;
@@ -263,7 +256,6 @@ export function handleUserFlagged(event: UserFlaggedEvent): void {
   );
   entity.user = event.params.user;
   entity.intervalIndex = event.params.intervalIndex;
-  entity.contractAddress = event.address; // <-- This line saves the address
 
   entity.blockNumber = event.block.number;
   entity.blockTimestamp = event.block.timestamp;
@@ -278,7 +270,6 @@ export function handleUserRejected(event: UserRejectedEvent): void {
   );
   entity.user = event.params.user;
   entity.caller = event.params.caller;
-  entity.contractAddress = event.address; // <-- This line saves the address
 
   entity.blockNumber = event.block.number;
   entity.blockTimestamp = event.block.timestamp;

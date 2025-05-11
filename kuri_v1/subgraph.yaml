@@ -8,9 +8,9 @@ dataSources:
     name: KuriCoreFactory
     network: base-sepolia
     source:
-      address: "0x3E7497056B541546Ea677EFfd3B9A4fDd4456e7C"
+      address: "0x970Eaf6087a70b8A3413D2C363CDC85a2FEa2892"
       abi: KuriCoreFactory
-      startBlock: 24990127
+      startBlock: 25553226
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

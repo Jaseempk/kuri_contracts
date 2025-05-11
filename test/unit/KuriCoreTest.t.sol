@@ -861,6 +861,7 @@ contract KuriCoreTest is Test, CodeConstants {
             KURI_AMOUNT,
             maxParticipants,
             initialiser,
+            initialiser,
             intervalTypeEnum
         );
 

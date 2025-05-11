@@ -8,6 +8,7 @@
         "type": "uint16"
       },
       { "internalType": "address", "name": "_initialiser", "type": "address" },
+      { "internalType": "address", "name": "_kuriAdmin", "type": "address" },
       {
         "internalType": "enum KuriCore.IntervalType",
         "name": "_intervalType",

@@ -276,6 +276,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint64 _kuriAmount,
         uint16 _participantCount,
         address _initialiser,
+        address _kuriAdmin,
         IntervalType _intervalType
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         kuriData.creator = _initialiser;
@@ -288,7 +289,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         kuriData.intervalType = _intervalType;
         kuriData.state = KuriState.INLAUNCH;
 
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, _kuriAdmin);
         _grantRole(INITIALISOR_ROLE, _initialiser);
     }
 
@@ -403,7 +404,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     function acceptUserMembershipRequest(
         address _user
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) public onlyRole(INITIALISOR_ROLE) {
         if (_user == address(0)) revert KuriCore__InvalidAddress();
         if (
             kuriData.totalParticipantsCount ==
@@ -456,7 +457,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     function rejectUserMembershipRequest(
         address _user
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) public onlyRole(INITIALISOR_ROLE) {
         if (kuriData.state != KuriState.INLAUNCH) {
             revert KuriCore__CantRejectWhenNotInLaunch();
         }
@@ -602,7 +603,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      * @notice Allows admin to withdraw tokens after cycle completion
      * @dev Only callable by admin role when cycle is not active
      */
-    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdraw() external onlyRole(INITIALISOR_ROLE) {
         if (kuriData.endTime > block.timestamp) {
             revert KuriCore__CantWithdrawWhenCycleIsActive();
         }
@@ -630,7 +631,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     function flagUser(
         address _user,
         uint16 _intervalIndex
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external onlyRole(INITIALISOR_ROLE) {
         uint16 userIndex = userToData[_user].userIndex;
         if (hasPaid(_user, _intervalIndex)) {
             revert KuriCore__CantFlagUserAlreadyPaid();
@@ -812,7 +813,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     function revokeInitialisor(
         address _initialiser
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external onlyRole(INITIALISOR_ROLE) {
         revokeRole(INITIALISOR_ROLE, _initialiser);
     }
 
