@@ -8,6 +8,12 @@
         "type": "uint16"
       },
       { "internalType": "address", "name": "_initialiser", "type": "address" },
+      { "internalType": "address", "name": "_kuriAdmin", "type": "address" },
+      {
+        "internalType": "address",
+        "name": "_vrfSubscriber",
+        "type": "address"
+      },
       {
         "internalType": "enum KuriCore.IntervalType",
         "name": "_intervalType",
@@ -32,6 +38,7 @@
     "type": "error"
   },
   { "inputs": [], "name": "KuriCore__AlreadyRejected", "type": "error" },
+  { "inputs": [], "name": "KuriCore__AlreadySubscribed", "type": "error" },
   { "inputs": [], "name": "KuriCore__CallerNotAccepted", "type": "error" },
   {
     "inputs": [],
@@ -75,6 +82,11 @@
   { "inputs": [], "name": "KuriCore__InvalidUserRequest", "type": "error" },
   { "inputs": [], "name": "KuriCore__KuriFilledAlready", "type": "error" },
   { "inputs": [], "name": "KuriCore__LaunchPeriodNotOver", "type": "error" },
+  {
+    "inputs": [],
+    "name": "KuriCore__MatketYetToBeSubscribed",
+    "type": "error"
+  },
   { "inputs": [], "name": "KuriCore__NoActiveKuri", "type": "error" },
   { "inputs": [], "name": "KuriCore__NotInLaunchState", "type": "error" },
   { "inputs": [], "name": "KuriCore__RaffleDelayNotOver", "type": "error" },
@@ -507,6 +519,43 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "subscriptionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "consumerCount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "contractAddress",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "VRFIntegrationDone",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "DEFAULT_ADMIN_ROLE",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
@@ -529,6 +578,13 @@
   },
   {
     "inputs": [],
+    "name": "MAX_CONSUMER_COUNT",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MONTHLY_INTERVAL",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "view",
@@ -545,6 +601,13 @@
     "inputs": [],
     "name": "SUPPORTED_TOKEN",
     "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "VRFSUBSCRIBER_ROLE",
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -592,6 +655,19 @@
     "name": "claimedKuriSlot",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_subscriptionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "createSubscriptionOrAddConsumer",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -679,6 +755,13 @@
     "inputs": [{ "internalType": "uint16", "name": "", "type": "uint16" }],
     "name": "intervalToWinnerIndex",
     "outputs": [{ "internalType": "uint16", "name": "", "type": "uint16" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "isSubscribed",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
     "type": "function"
   },

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {VRFConsumerBaseV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {IVRFCoordinatorV2Plus} from "chainlink/contracts/src/v0.8/vrf/dev/interfaces/IVRFCoordinatorV2Plus.sol";
 
 /**
  * @title KuriCore
@@ -20,6 +21,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__InvalidAddress();
     error KuriCore__AlreadyRejected();
     error KuriCore__NotInLaunchState();
+    error KuriCore__AlreadySubscribed();
     error KuriCore__CallerNotAccepted();
     error KuriCore__UserYetToGetASlot();
     error KuriCore__KuriFilledAlready();
@@ -34,6 +36,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     error KuriCore__UserHasClaimedAlready();
     error KuriCore__UserYetToMakePayments();
     error KuriCore__CantFlagForFutureIndex();
+    error KuriCore__MatketYetToBeSubscribed();
     error KuriCore__CantFlagUserAlreadyPaid();
     error KuriCore__AlreadyPastLaunchPeriod();
     error KuriCore__CantRejectWhenNotInLaunch();
@@ -53,16 +56,17 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     uint256 public constant RAFFLE_DELAY_DURATION = 3 days;
     /// @notice Role identifier for addresses authorized to initialize the Kuri
     bytes32 public constant INITIALISOR_ROLE = keccak256("INITIALISOR_ROLE");
+
+    /// @notice Role identifier for addresses authorized to vrf_subscription
+    bytes32 public constant VRFSUBSCRIBER_ROLE =
+        keccak256("VRFSUBSCRIBER_ROLE");
+
     /// @notice Address of the token used for deposits(USDC in our case)
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
 
-    /// @notice Chainlink VRF subscription ID for randomness requests
-    uint256 public s_subscriptionId =
-        111354311979648395489096536317869612424008220436069067319236829392818402563961;
-    /// @notice Chainlink VRF key hash for randomness requests
-    bytes32 public s_keyHash =
-        0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
+    uint256 public constant MAX_CONSUMER_COUNT = 100;
+
     /// @notice Address of the Chainlink VRF Coordinator contract
     address public vrfCoordinator = 0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE;
     /// @notice Gas limit for Chainlink VRF callback
@@ -71,6 +75,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     uint16 public s_requestConfirmations = 3;
     /// @notice Number of random words to request from Chainlink VRF
     uint32 public s_numWords = 1;
+    /// @notice Chainlink VRF key hash for randomness requests
+    bytes32 public s_keyHash =
+        0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
+
+    /// @notice Chainlink VRF subscription ID for randomness requests
+    uint256 public s_subscriptionId;
+
+    bool public isSubscribed;
 
     /**
      * @notice Enum representing the possible states of a Kuri
@@ -105,7 +117,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         NONE,
         ACCEPTED,
         REJECTED,
-        FLAGGED
+        FLAGGED,
+        APPLIED
     }
 
     /**
@@ -264,6 +277,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
      */
     event UserRejected(address user, address caller);
 
+    event VRFIntegrationDone(
+        address caller,
+        uint256 subscriptionId,
+        uint256 consumerCount,
+        address contractAddress,
+        uint256 timestamp
+    );
+
     /**
      * @notice Creates a new Kuri instance
      * @dev Sets initial state to INLAUNCH and grants roles
@@ -277,6 +298,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         uint16 _participantCount,
         address _initialiser,
         address _kuriAdmin,
+        address _vrfSubscriber,
         IntervalType _intervalType
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         kuriData.creator = _initialiser;
@@ -291,6 +313,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
 
         _grantRole(DEFAULT_ADMIN_ROLE, _kuriAdmin);
         _grantRole(INITIALISOR_ROLE, _initialiser);
+        _grantRole(VRFSUBSCRIBER_ROLE, _vrfSubscriber);
     }
 
     /**
@@ -395,6 +418,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         }
         emit MembershipRequested(msg.sender, block.timestamp);
         userToData[msg.sender].userAddress = msg.sender;
+        userToData[msg.sender].userState = UserState.APPLIED;
     }
 
     /**
@@ -413,7 +437,10 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             revert KuriCore__KuriFilledAlready();
         }
 
-        if (userToData[_user].userAddress != _user) {
+        if (
+            userToData[_user].userAddress != _user ||
+            userToData[_user].userState != UserState.APPLIED
+        ) {
             revert KuriCore__InvalidUserRequest();
         }
 
@@ -468,7 +495,10 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (userToData[_user].userState == UserState.REJECTED) {
             revert KuriCore__AlreadyRejected();
         }
-        if (userToData[_user].userAddress != _user) {
+        if (
+            userToData[_user].userAddress != _user ||
+            userToData[_user].userState != UserState.APPLIED
+        ) {
             revert KuriCore__InvalidUserRequest();
         }
 
@@ -538,6 +568,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         if (kuriData.nexRaffleTime > block.timestamp) {
             revert KuriCore__RaffleDelayNotOver();
         }
+
+        if (!isSubscribed) revert KuriCore__MatketYetToBeSubscribed();
 
         // Request random words from Chainlink VRF
         _requestId = s_vrfCoordinator.requestRandomWords(
@@ -654,6 +686,36 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
                 break;
             }
         }
+    }
+
+    function createSubscriptionOrAddConsumer(
+        uint256 _subscriptionId
+    ) external onlyRole(VRFSUBSCRIBER_ROLE) returns (uint256) {
+        if (isSubscribed) revert KuriCore__AlreadySubscribed();
+        (, , , , address[] memory consumers) = IVRFCoordinatorV2Plus(
+            vrfCoordinator
+        ).getSubscription(_subscriptionId);
+        if (consumers.length == MAX_CONSUMER_COUNT) {
+            s_subscriptionId = IVRFCoordinatorV2Plus(vrfCoordinator)
+                .createSubscription();
+        }
+        s_subscriptionId = _subscriptionId;
+
+        emit VRFIntegrationDone(
+            msg.sender,
+            s_subscriptionId,
+            consumers.length,
+            address(this),
+            block.timestamp
+        );
+        // Register this contract as a consumer
+        IVRFCoordinatorV2Plus(vrfCoordinator).addConsumer(
+            s_subscriptionId,
+            address(this)
+        );
+        isSubscribed = true;
+
+        return s_subscriptionId;
     }
 
     /**

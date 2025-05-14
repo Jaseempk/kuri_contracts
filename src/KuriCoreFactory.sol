@@ -13,6 +13,7 @@ contract KuriCoreFactory is AccessControl {
     error KCF__InvalidAdminAddy();
 
     address public s_kuriAdmin = 0x66aAf3098E1eB1F24348e84F509d8bcfD92D0620;
+    address public s_vrfSubscriber = 0x66aAf3098E1eB1F24348e84F509d8bcfD92D0620;
 
     /**
      * @notice Emitted when a new KuriCore market is successfully deployed.
@@ -61,6 +62,7 @@ contract KuriCoreFactory is AccessControl {
             kuriParticipantCount,
             msg.sender,
             s_kuriAdmin,
+            s_vrfSubscriber,
             _intervalType
         );
 
@@ -74,6 +76,12 @@ contract KuriCoreFactory is AccessControl {
 
         // Return address of the deployed contract
         return address(kuriCore);
+    }
+
+    function setVRFSubscriber(
+        address _vrfSubscriber
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s_vrfSubscriber = _vrfSubscriber;
     }
 
     function setKuriAdmin(

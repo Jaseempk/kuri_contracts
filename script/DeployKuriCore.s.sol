@@ -50,6 +50,7 @@ contract DeployKuriCore is CodeConstants, Script {
             config.participantCount,
             config.initialiser,
             config.initialiser,
+            config.initialiser,
             config.intervalType
         );
 

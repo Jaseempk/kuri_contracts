@@ -22,6 +22,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@mendable/firecrawl-js": "^1.23.9"
+    "@mendable/firecrawl-js": "^1.23.9",
+    "@pythnetwork/entropy-sdk-solidity": "^1.5.0"
   }
 }
