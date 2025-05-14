@@ -65,6 +65,8 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     address public constant SUPPORTED_TOKEN =
         0xC129124eA2Fd4D63C1Fc64059456D8f231eBbed1;
 
+    /// @notice Maximum number of consumers allowed per VRF subscription
+    /// @dev Used to determine when to create a new subscription vs adding to existing one
     uint256 public constant MAX_CONSUMER_COUNT = 100;
 
     /// @notice Address of the Chainlink VRF Coordinator contract
@@ -82,6 +84,7 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
     /// @notice Chainlink VRF subscription ID for randomness requests
     uint256 public s_subscriptionId;
 
+    /// @notice Flag indicating if the contract is subscribed to Chainlink VRF service
     bool public isSubscribed;
 
     /**
@@ -688,19 +691,34 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
         }
     }
 
+    /**
+     * @notice Creates a new VRF subscription or adds this contract as a consumer to an existing one
+     * @dev Only callable by accounts with VRFSUBSCRIBER_ROLE
+     * @param _subscriptionId The ID of the VRF subscription to use or add to
+     * @return The subscription ID that was created or used
+     * @custom:throws KuriCore__AlreadySubscribed if contract is already subscribed to VRF
+     */
     function createSubscriptionOrAddConsumer(
         uint256 _subscriptionId
     ) external onlyRole(VRFSUBSCRIBER_ROLE) returns (uint256) {
+        // Check if contract is already subscribed to VRF
         if (isSubscribed) revert KuriCore__AlreadySubscribed();
+
+        // Get current subscription details from VRF coordinator
         (, , , , address[] memory consumers) = IVRFCoordinatorV2Plus(
             vrfCoordinator
         ).getSubscription(_subscriptionId);
+
+        // Create new subscription if consumer limit reached
         if (consumers.length == MAX_CONSUMER_COUNT) {
             s_subscriptionId = IVRFCoordinatorV2Plus(vrfCoordinator)
                 .createSubscription();
+        } else {
+            // Use existing subscription
+            s_subscriptionId = _subscriptionId;
         }
-        s_subscriptionId = _subscriptionId;
 
+        // Emit event for VRF integration
         emit VRFIntegrationDone(
             msg.sender,
             s_subscriptionId,
@@ -708,11 +726,14 @@ contract KuriCore is AccessControl, VRFConsumerBaseV2Plus {
             address(this),
             block.timestamp
         );
-        // Register this contract as a consumer
+
+        // Register this contract as a consumer with VRF coordinator
         IVRFCoordinatorV2Plus(vrfCoordinator).addConsumer(
             s_subscriptionId,
             address(this)
         );
+
+        // Mark contract as subscribed
         isSubscribed = true;
 
         return s_subscriptionId;

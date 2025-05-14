@@ -78,12 +78,25 @@ contract KuriCoreFactory is AccessControl {
         return address(kuriCore);
     }
 
+    /**
+     * @notice Sets the VRF subscriber address for new Kuri markets
+     * @dev Only callable by accounts with DEFAULT_ADMIN_ROLE
+     * @param _vrfSubscriber The address to be set as the VRF subscriber
+     * @custom:access Restricted to DEFAULT_ADMIN_ROLE
+     */
     function setVRFSubscriber(
         address _vrfSubscriber
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_vrfSubscriber = _vrfSubscriber;
     }
 
+    /**
+     * @notice Sets a new admin address for Kuri markets
+     * @dev Only callable by accounts with DEFAULT_ADMIN_ROLE
+     * @param _newAdmin The address to be set as the new admin
+     * @custom:throws KCF__InvalidAdminAddy if _newAdmin is zero address
+     * @custom:access Restricted to DEFAULT_ADMIN_ROLE
+     */
     function setKuriAdmin(
         address _newAdmin
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
