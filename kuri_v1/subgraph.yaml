@@ -51,6 +51,7 @@ templates:
         - UserDeposited
         - UserFlagged
         - UserRejected
+        - VRFIntegrationDone
       abis:
         - name: KuriCore
           file: ./abis/KuriCore.json
@@ -85,4 +86,6 @@ templates:
           handler: handleUserFlagged
         - event: UserRejected(address,address)
           handler: handleUserRejected
+        - event: VRFIntegrationDone(address,uint256,uint256,address,uint256)
+          handler: handleVRFIntegrationDone
       file: ./src/kuri-core.ts

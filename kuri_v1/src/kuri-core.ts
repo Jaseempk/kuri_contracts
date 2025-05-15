@@ -14,6 +14,7 @@ import {
   UserDeposited as UserDepositedEvent,
   UserFlagged as UserFlaggedEvent,
   UserRejected as UserRejectedEvent,
+  VRFIntegrationDone as VRFIntegrationDoneEvent,
 } from "../generated/templates/KuriCore/KuriCore";
 import {
   CoordinatorSet,
@@ -31,6 +32,7 @@ import {
   UserDeposited,
   UserFlagged,
   UserRejected,
+  VRFIntegrationDone,
 } from "../generated/schema";
 
 export function handleCoordinatorSet(event: CoordinatorSetEvent): void {
@@ -278,6 +280,23 @@ export function handleUserRejected(event: UserRejectedEvent): void {
   entity.user = event.params.user;
   entity.caller = event.params.caller;
   entity.contractAddress = event.address; // <-- This line saves the address
+  entity.blockNumber = event.block.number;
+  entity.blockTimestamp = event.block.timestamp;
+  entity.transactionHash = event.transaction.hash;
+
+  entity.save();
+}
+
+export function handleVRFIntegrationDone(event: VRFIntegrationDoneEvent): void {
+  let entity = new VRFIntegrationDone(
+    event.transaction.hash.concatI32(event.logIndex.toI32())
+  );
+  entity.caller = event.params.caller;
+  entity.subscriptionId = event.params.subscriptionId;
+  entity.consumerCount = event.params.consumerCount;
+  entity.contractAddress = event.params.contractAddress;
+  entity.timestamp = event.params.timestamp;
+
   entity.blockNumber = event.block.number;
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;

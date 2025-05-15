@@ -175,3 +175,15 @@ type UserRejected @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+
+type VRFIntegrationDone @entity(immutable: true) {
+  id: Bytes!
+  caller: Bytes! # address
+  subscriptionId: BigInt! # uint256
+  consumerCount: BigInt! # uint256
+  contractAddress: Bytes! # address
+  timestamp: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
